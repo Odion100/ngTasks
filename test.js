@@ -1,83 +1,91 @@
 
-var service
+var listingsView
 var app = tasks.app()
 
-app.loadService('views', {
-	route:'/viewService',
-	port:5500,
+app.loadService('listingsView', {
+	route:'/listingsView',
+	port:4200,
 	host:'localhost'
 })
- 
+
 .module('test1', function(){
-	service = this.useService('views')
-	var test1 = this	
-	this.testMessage = 'Hello World!'
-	this.runTest = function(){
-		service.orders.getOrders({}, function(err, results){
-			if(err){
-				test1.testMessage = 'error respones---------------------'
-			}else{
-				test1.testMessage = 'succesful respones---------------------'
-				setTimeout(function(){
-            
-            	//$("div[scope='testscope']").click()
-            	//angular.element($("div[scope='test']")[0]).scope().$digest()
-        	}, 1)
-			}
+	listingsView = this.useService('listingsView')
+	console.log(listingsView)		
+})
 
+.scope('fileinput', function(){
+	listingsView = this.useService('listingsView')
+	console.log(listingsView)		
+
+	this.sendFile = function(input){
+		listingsView.listingsTbl.uploadTemplate({
+			files:input.files,
+			ad_id:mockAd._id,
+		}, function(err, results){
+			if(err){
+				console.log(err);
+			}else{			
+				console.log(results);				
+			}
 		})
-		console.log('this is a succesful test!!! ----     ')
-		//test1.testMessage = "this is a succesful test!!! ----"
-			
+	}
+}, {
+	template:'<input type="file" onchange="angular.element(this).scope().fileinput.sendFile(this)" multiple>'
+})
+
+function getData(next){
+	var search_options = {
+		user_id:'5a5fcd9ee6f6e221448cd202',
+		beds:5,
+		baths:null,
+		max_rent:2592,
+		min_rent:663, 
+		borough:'',
+		neighborhood:'',
+		address:'',
+		limit:null,
+		sort:1
 	}
 
-
-	console.log(service)
-	service.orders.on('test', function(data){
-		console.log('data---------------')
-		console.log(data)
+	console.log('listingsView.listingsTbl.getData (TEST START): ' + moment()._d)
+	listingsView.listingsTbl.getData(search_options, function(err, results){
+		if(err){
+			console.log('listingsView.listingsTbl.getData (ERROR CALLBACK): ' + moment()._d)
+			console.log(err);			
+			if(typeof next === 'function'){next(err)};
+		}else{
+			console.log('listingsView.listingsTbl.getData (SUCCESS CALLBACK): ' + moment()._d)
+			console.log(results)
+			if(typeof next === 'function'){next(null, results)};
+		}
 	})
-	
-})
+}
 
-.module('test2', function(){
-	service = this.useService('views')
-	var test2 = this	
-	this.testMessage = 'Hello World!'
-	this.runTest = function(){
-		service.orders.getOrders({}, function(err, results){
-			if(err){
-				test2.testMessage = 'error respones---------------------2'
-			}else{
-				test2.testMessage = 'succesful respones---------------------2'
-				setTimeout(function(){
-            
-            	//$("div[scope='testscope']").click()
-            	//angular.element($("div[scope='test']")[0]).scope().$digest()
-        	}, 1)
-			}
-
-		})
-		console.log('this is a succesful test!!! ----   2  ')
-		//test2.testMessage = "this is a succesful test!!! ----"
-			
+function downloadTemplate(next){
+	var search_options = {
+		user_id:'5a5fcd9ee6f6e221448cd202',
+		beds:5,
+		baths:null,
+		max_rent:2592,
+		min_rent:663, 
+		borough:'',
+		neighborhood:'',
+		address:'',
+		limit:null,
+		sort:1
 	}
 
-
-	console.log(service)
-	/*service.orders.on('test', function(data){
-		console.log('data---------------')
-		console.log(data)
-	})*/
-	
-})
-
-.component('testscope', {	
-	modules:['test1'],
-	template:'<div>{{message}} </div><div>{{test1.testMessage}} </div> <button ng-click="test1.runTest()" >test</button><div>{{test1.testMessage}}</div>'
-})
-.component('testscope2', {	
-	modules:['test2'],
-	template:'<div>{{message}} </div><div>{{test2.testMessage}} </div> <button ng-click="test2.runTest()" >test</button><div>{{test2.testMessage}}</div>'
-})
-
+	console.log('listingsView.listingsTbl.downloadTemplate (TEST START): ' + moment()._d)
+	listingsView.listingsTbl.downloadTemplate({template:'Listings Upload Template.xlsm'}, function(err, results){
+		if(err){
+			console.log('listingsView.listingsTbl.downloadTemplate (ERROR CALLBACK): ' + moment()._d)
+			console.log(err);			
+			if(typeof next === 'function'){next(err)};
+		}else{
+			console.log('listingsView.listingsTbl.downloadTemplate (SUCCESS CALLBACK): ' + moment()._d)
+			console.log(results)
+			window.open(results.url)
+			if(typeof next === 'function'){next(null, results)};
+		}
+	})
+}
