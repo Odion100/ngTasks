@@ -288,7 +288,8 @@ var tasks = (function(window){
         tasks.scope = addScope
         tasks.initComponent = initComponent;
         tasks.loadComponent = loadComponent;
-        tasks.ngService = ngService    
+        tasks.ngService = ngService 
+        tasks.client = _client;   
 
         function initComponent(options){
             thisComponent.templateUrl = options.templateUrl
@@ -340,9 +341,10 @@ var tasks = (function(window){
         }
 
         function refreshComponents(){
-            if(scopes[0]){
-                angular.element($(scopes[0].name)[0]).scope().$digest()        
-            }            
+            scopes.forEach(function(s){
+                scopeInitializer(s.name, thisComponent[s.name], s.options)           
+                angular.element($(s.name)[0]).scope().$digest() 
+            })            
         }
 
         function scopeFactory(mod){
@@ -374,34 +376,36 @@ var tasks = (function(window){
         }
         
         function scopeInitializer(name, scopeMod, options){           
-            var e = $(name+":not([tsk-scope])")[0];
-            $(e).attr('tsk-scope', '');            
+            var element = $(name+":not([tsk-scope])");
 
-            var $scope = angular.element(e).scope();             
-            var $compile = ngService('$compile');
-            var $templateRequest = ngService('$templateRequest');
-            if(e){
-                $scope.$apply(function(){             
-                    $scope[name] = scopeMod;
-                    
-                    if(options.templateUrl){
+            element.each(function(index, e){
+                $(e).attr('tsk-scope', '');            
+                            
+                var $scope = angular.element(e).scope();             
+                var $compile = ngService('$compile');
+                var $templateRequest = ngService('$templateRequest');
+                if(e){
+                    $scope.$apply(function(){             
+                        $scope[name] = scopeMod;
                         
-                        $templateRequest(options.templateUrl)
-                        .then(function(template){
+                        if(options.templateUrl){
+                            
+                            $templateRequest(options.templateUrl)
+                            .then(function(template){
 
-                             $compile($(e).html(template).contents())($scope);
+                                 $compile($(e).html(template).contents())($scope);
 
-                        }, function(err){
+                            }, function(err){
 
-                            console.log(err)
-                        })
-                    }else if(options.template){
-                        $compile($(e).html(options.template).contents())($scope);
-                    }
-                    console.log(name)                                   
-                    console.log($scope)                   
-                })
-            }                                            
+                                console.log(err)
+                            })
+                        }else if(options.template){
+                            $compile($(e).html(options.template).contents())($scope);
+                        }                                    
+                    })
+                }
+            })
+                                                            
         } 
 
         function addScope(componentName, scopeConstructor, options){    
@@ -465,7 +469,8 @@ var tasks = (function(window){
         function modFactory(mod){
             var thisMod = {}, events = {};     
             thisMod.useModule = useModule;        
-            thisMod.useService = useService;        
+            thisMod.useService = useService;
+            thisMod.useComponent = useComponent;        
             thisMod.emit = emit;
             thisMod.on = on;
 
@@ -481,6 +486,10 @@ var tasks = (function(window){
             function useModule(modToUse){              
                 return getMod(modToUse, mod);                        
             }        
+
+            function useComponent(name){
+                return loadedComponents[name]
+            }
 
             function emit(eventName, emitter, emitData){            
                 if(events[eventName]){
@@ -767,11 +776,15 @@ var tasks = (function(window){
         function init(){
             //last fn to call is intiMods 
             initSync.push(initModules);
+            //get behind angular-ui-router on the callstack
+            setTimeout(function(){
+                multiTaskHandler()
+                .addMultiTask(initSync)
+                .addMultiTaskAsync(initAsync)
+                .runTasks(loadComplete)   
 
-            multiTaskHandler()
-            .addMultiTask(initSync)
-            .addMultiTaskAsync(initAsync)
-            .runTasks(loadComplete)
+            }, 1000)
+            
         }
 
         // emit load event when component has fully loaded
@@ -926,22 +939,13 @@ var objHandler = function(obj){
         var client = {};        
         client.request = request;        
         client.upload = fileUploadHandler       
-        //request can only be made through the request obj and request handler
-        function request(method, url, data){
-            return {
-                _id:uniqueNumber(),                
-                cId:'clientId',                
-                url:url,
-                method:method,
-                data:data
-            };             
-        }
+
         //request can only be made through the request obj and request handler
         function request (request, callBack){            
             http({
                 method:request.method,
                 url:request.url,
-                data:request
+                data:request.data
             }).then(function successCallback(res){
                 if (typeof callBack === 'function') {callBack(null, res.data)}                    
             }, function errorCallback(res){
