@@ -279,7 +279,7 @@ var registeredComponents = []
 var tasks = (function(window){            
     var ngService = angular.injector(['ng', 'ngFileUpload']).get             
     function tasks(){        
-        var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], scopes = [], initAsync = [], initSync = [];
+        var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], scopes = [], initAsync = [], initSync = [], configModule ={};
         var thisComponent = {}, loadedComponents = {};
 
         tasks.loadService = loadService;
@@ -288,8 +288,9 @@ var tasks = (function(window){
         tasks.scope = addScope
         tasks.initComponent = initComponent;
         tasks.loadComponent = loadComponent;
-        tasks.ngService = ngService 
-        tasks.client = _client;   
+        tasks.onLoad = onLoad;
+        tasks.ngService = ngService;   
+
 
         function initComponent(options){
             thisComponent.templateUrl = options.templateUrl
@@ -299,6 +300,7 @@ var tasks = (function(window){
 
         function loadComponent(componentName, options){
              initAsync.unshift(new componentLoader(componentName, options).run)
+             setInit() 
              return tasks
         }
 
@@ -325,7 +327,7 @@ var tasks = (function(window){
                             if(loadedComponents[componentName]){
                                 loadedComponents[componentName].onLoad(next);                                
                             }else{
-                                loadedComponents[componentName] = {err:componentName + ':COMPONENT NOT INITIALIZED!'};
+                                loadedComponents[componentName] = {err:componentName + ':COMPONENT FAILED TO INITIALIZED!'};
                                 next();
                             }
                             
@@ -343,7 +345,10 @@ var tasks = (function(window){
         function refreshComponents(){
             scopes.forEach(function(s){
                 scopeInitializer(s.name, thisComponent[s.name], s.options)           
-                angular.element($(s.name)[0]).scope().$digest() 
+                var e = $(s.name)[0]
+                if(e){
+                    angular.element(e).scope().$digest() 
+                }                
             })            
         }
 
@@ -353,6 +358,8 @@ var tasks = (function(window){
             thisMod.useModule = useModule;        
             thisMod.useService = useService; 
             thisMod.useComponent = useComponent;
+            thisMod.useConfig = useConfig;
+            thisMod.useScope = useScope;
 
             function useService(serviceName){
                 return passService(serviceName, mod);                      
@@ -364,6 +371,14 @@ var tasks = (function(window){
 
             function useComponent(name){
                 return loadedComponents[name]
+            }
+
+            function useConfig(){
+                return configModule
+            }
+
+            function useScope(){
+
             }
             mod.scopeConstructor.apply(thisMod, []);
             //add the scope to thisComponent object
@@ -377,10 +392,10 @@ var tasks = (function(window){
         
         function scopeInitializer(name, scopeMod, options){           
             var element = $(name+":not([tsk-scope])");
-
+            
             element.each(function(index, e){
                 $(e).attr('tsk-scope', '');            
-                            
+
                 var $scope = angular.element(e).scope();             
                 var $compile = ngService('$compile');
                 var $templateRequest = ngService('$templateRequest');
@@ -401,7 +416,9 @@ var tasks = (function(window){
                             })
                         }else if(options.template){
                             $compile($(e).html(options.template).contents())($scope);
-                        }                                    
+                        }
+                        console.log(name)                                   
+                        console.log($scope)                   
                     })
                 }
             })
@@ -443,25 +460,25 @@ var tasks = (function(window){
 
         function getMod(modName, user){        
             //basically record the modName as a dependency
-            if(user.dependencies.indexOf(modName) === -1){
+            /*if(user.dependencies.indexOf(modName) === -1){
                 user.dependencies.push(modName);
             }
             //record the thisMode as a dependent of modName
             if(modules[modName].dependents.indexOf(user.name) === -1){
                 modules[modName].dependents.push(user.name);
-            }
+            }*/
 
             return modules[modName].mod;                
         }
 
         function passService(serviceName, user){
             //record dependencies;
-            if(user.service_dependencies.indexOf(serviceName) === -1){
+           /* if(user.service_dependencies.indexOf(serviceName) === -1){
                 user.service_dependencies.push(serviceName);
             }
             if(services[serviceName].dependents.indexOf(user.name) === -1){
                 services[serviceName].dependents.push(user.name);
-            }
+            }*/
 
             return services[serviceName].service; 
         }
@@ -470,7 +487,8 @@ var tasks = (function(window){
             var thisMod = {}, events = {};     
             thisMod.useModule = useModule;        
             thisMod.useService = useService;
-            thisMod.useComponent = useComponent;        
+            thisMod.useComponent = useComponent;
+            thisMod.useConfig = useConfig;        
             thisMod.emit = emit;
             thisMod.on = on;
 
@@ -489,6 +507,10 @@ var tasks = (function(window){
 
             function useComponent(name){
                 return loadedComponents[name]
+            }
+
+            function useConfig(){
+                return configModule
             }
 
             function emit(eventName, emitter, emitData){            
@@ -536,67 +558,82 @@ var tasks = (function(window){
             return tasks 
         }    
 
-         function loadService(name, option, cb){   
-            
-            var uri = 'http://' + option.host +':'+ option.port + option.route       
-            if(services[name]){
-                //if the service already exists
-                throw "tasksJS ERROR: SERVICE NAMING CONFLICT!!! Two Services cannot be assigned the same name: " + name;                                
-            }
+        function loadService(name, option){   
+            var uri = 'http://' + option.host +':'+ option.port + option.route 
 
              services[name] = {                                                                            
                 dependents:[],
                 name:name,
-                uri:uri                            
-            }  
+                uri:uri,
+                connection_attemps:0,
+                service:{}                            
+            };  
 
-            initAsync.unshift(new getService(uri, name, cb).run)
+            initAsync.unshift(new getService(uri, name).run);
             setInit();
+
+            _serv = name;
             return tasks
         }  
 
-        function getService(url, name, cb){
-                     
-            return {//run will be called by a mth
-                run:function(nextTask){                    
+        var _serv = undefined;
+        function onLoad(handler){    
+            services[_serv].onLoad = configHandler(handler).run;
+        }
 
+        function getService(url, name){
+                 
+            return {//run will be called by the mth
+                run:function(next){
                     _client.request({
                         method:'GET',
                         url:url
                     }, function(err, data){
                         if (err) {
-                            console.log(err);
-                            //user can check fo the existance of connectionErr property inside modules to check if the service has loaded correctly
-                            //so that the app can optionally be made to work even when some services fail
-                            services[name].service = {connectionErr:true, data:err};
-                            if(typeof cb === 'function'){cb(err)};
-                        }else{                    
-                            //console.log(data);                                
-                            console.log(data)
-                            services[name].service = new createServiceAPI(data, name);
+                            services[name].connection_attemps++;
+                            console.log(' -- FAILED CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');                                
+                            //console.log(err);
+                            //user can check for the existance of connectionErr property inside modules to check if the service has loaded correctly
+                            //so that the app can optionally be made to work even when some services fail                        
+                            services[name].service.connectionErr = true;
+                            services[name].service.err = err;
+
+                            //try to establish connection up to ten times
+                            if(services[name].connection_attemps < 10){                            
+                                setTimeout(function(){                                
+                                    getService(url, name).run();                            
+                                }, services[name].connection_attemps*1500);
+                            }
                             
-                            if(typeof cb === 'function'){cb(null)}
+                        }else{                    
+                            console.log(' -- SUCCESSFUL CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');
+
+                            services[name].service.connectionErr = false;
+                            services[name].service.err = null;
+                            createServiceAPI(services[name], data); 
+
+                            if(typeof services[name].onLoad === 'function'){
+                                services[name].onLoad()
+                            }                                           
                         }
-                        nextTask();
+                        if(typeof next === 'function'){next()}                    
                     })
                 }
             }
-        }           
-
-        function createServiceAPI(apiMap, serviceName){
-            var service = {}, maps = apiMap.maps;
-            //each map in apiMaps.maps describes a backend serverMod
-            for (var i = 0; i < maps.length; i++) {
-                //serviceRequestHandler creates replica of the backend serverMod api 
-                //that will send a request to that serverMod's method
-                service[maps[i].modName] = new serviceRequestHandler(maps[i], apiMap.host, serviceName) 
-                
-            }
-
-            return service
         }
 
-        function serviceRequestHandler(map, host, serviceName){
+        function createServiceAPI(serviceHolder, api){
+
+            var service = serviceHolder.service, maps = api.maps;
+            //each map in apis.maps describes a backend serverMod
+            for (var i = 0; i < maps.length; i++) {
+                //serverModRequestHandler creates replica of the backend serverMod api 
+                //that will send a request to that serverMod's method
+                service[maps[i].modName] = new serverModRequestHandler(maps[i], api.host, serviceHolder.name)             
+            }        
+        }
+
+        function serverModRequestHandler(map, host, serviceName){
             //handles request to backend server mod
 
             //use map to regenerate backend  api
@@ -622,11 +659,23 @@ var tasks = (function(window){
                         //loop throuhg each serverMod in the service and use _updatePath method to update the route to the serverMod
                         services[serviceName].service[new_maps[i].modName]._updatePath(new_route, new_api.host, new_maps[i].nsp);
                     }
-                    //use this handle on reqHandler to resend request
-                    handler.run(req.data, function(err, data){
-                        callBack(err, data);
-                        attempts = 0;
-                    })                        
+
+                    if(typeof services[serviceName].onLoad === 'function'){
+                        //run onLoad Handler first
+                        services[serviceName].onLoad(function(){
+                            //use this handle on reqHandler to resend the request
+                            handler.run(req.data, function(err, data){
+                                callBack(err, data);
+                                attempts = 0;
+                            })
+                        })
+                    }else{
+                        //use this handle on reqHandler to resend the request
+                        handler.run(req.data, function(err, data){
+                            callBack(err, data);
+                            attempts = 0;
+                        })
+                    }                        
                 }              
             }            
             //paths used for single and multi file uploads
@@ -684,8 +733,10 @@ var tasks = (function(window){
 
             function dispatch(e){
                 if(eventHandlers[e.name]){
+                    e.received_by = appName;
+                    e.received_at = Date();  
                     eventHandlers[e.name].subscribers.forEach(function(sub){
-                        sub(e.data, e)
+                        sub(e);
                     })
                 }
             }
@@ -704,6 +755,8 @@ var tasks = (function(window){
                 }, function(err, new_api){
                     if(err){
                         console.log(err)
+                        //pass the job onto getService function   
+                        getService(services[serviceName].uri, serviceName).run();
                     }else{
                         var new_maps = new_api.maps;
 
@@ -714,9 +767,14 @@ var tasks = (function(window){
                             //loop throuhg each serverMod in the service and use _updatePath method to update the route to the serverMod
                             services[serviceName].service[new_maps[i].modName]._updatePath(new_route, new_api.host, new_maps[i].nsp);
                         }
+
+                        if(typeof services[serviceName].onLoad === 'function'){
+                            services[serviceName].onLoad()
+                        } 
                     }
                 })
             }
+
             function initSocketConnection(name_space){
                 var socket = io.connect(name_space)
                 console.log(map.nsp)
@@ -746,29 +804,31 @@ var tasks = (function(window){
            return serverMod
         }  
 
-        function taskConfig(fn){
+        function configHandler(handler){
 
             return {//will be called by mth
-                run:function(config_cb){
-                    //if config is used config_cb needs to be called for app to start
+                run:function(next){
+                    //if config is used next needs to be called for app to start
 
-                    var configMod = {}
+                    var configMod = {}                
                     
-                    configMod.next = config_cb
-
-                    configMod.useService = function useService(serviceName){
-                        return services[serviceName].service
+                    configMod.next = function(){
+                        if(typeof next === 'function'){next()}
                     }
 
-                    fn.apply(configMod);
-                    if(configMod.devMode){console.log('TasksJS: - init');}
-                    if(configMod.devMode){console.log('TasksJS tasks.config: this.next() must be called in order to continue initializing <--');}
+                    configMod.done = configMod.next
+                    
+                    configMod.useService = function useService(serviceName){
+                        return services[serviceName].service;
+                    }
+
+                    handler.apply(configMod);
                 }
             }
         }
 
-        function config(fn){
-            initSync.push(new taskConfig(fn).run)
+        function config(handler){
+            initSync.unshift(new configHandler(handler).run)
             setInit();
             return tasks
         }
@@ -776,24 +836,20 @@ var tasks = (function(window){
         function init(){
             //last fn to call is intiMods 
             initSync.push(initModules);
-            //get behind angular-ui-router on the callstack
-            setTimeout(function(){
-                multiTaskHandler()
-                .addMultiTask(initSync)
-                .addMultiTaskAsync(initAsync)
-                .runTasks(loadComplete)   
 
-            }, 1000)
-            
+            multiTaskHandler()
+            .addMultiTask(initSync)
+            .addMultiTaskAsync(initAsync)
+            .runTasks(loadComplete)
         }
 
         // emit load event when component has fully loaded
-        var registeredCallbacks = []
+        var registered_handlers = []
         function registerHandler(cb){
-            registeredCallbacks.push(cb)
+            registered_handlers.push(cb)
         }        
         function loadComplete(){
-            registeredCallbacks.forEach(function(cb){
+            registered_handlers.forEach(function(cb){
                 cb();
                 thisComponent.onLoad = null;
             });
@@ -939,13 +995,22 @@ var objHandler = function(obj){
         var client = {};        
         client.request = request;        
         client.upload = fileUploadHandler       
-
+        //request can only be made through the request obj and request handler
+        function request(method, url, data){
+            return {
+                _id:uniqueNumber(),                
+                cId:'clientId',                
+                url:url,
+                method:method,
+                data:data
+            };             
+        }
         //request can only be made through the request obj and request handler
         function request (request, callBack){            
             http({
                 method:request.method,
                 url:request.url,
-                data:request.data
+                data:request
             }).then(function successCallback(res){
                 if (typeof callBack === 'function') {callBack(null, res.data)}                    
             }, function errorCallback(res){
