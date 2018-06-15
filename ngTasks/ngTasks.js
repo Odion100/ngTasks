@@ -638,40 +638,6 @@ var tasks = (function(window){
                     }).always(function(){
                         if(typeof next === 'function'){next()} 
                     })
-
-                    /*_client.request({
-                        method:'GET',
-                        url:url
-                    }, function(err, data){
-                        if (err) {
-                            services[name].connection_attemps++;
-                            console.log(' -- FAILED CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');                                
-                            //console.log(err);
-                            //user can check for the existance of connectionErr property inside modules to check if the service has loaded correctly
-                            //so that the app can optionally be made to work even when some services fail                        
-                            services[name].service.connectionErr = true;
-                            services[name].service.err = err;
-
-                            //try to establish connection up to ten times
-                            if(services[name].connection_attemps < 10){                            
-                                setTimeout(function(){                                
-                                    getService(url, name).run();                            
-                                }, services[name].connection_attemps*1500);
-                            }
-                            
-                        }else{                    
-                            console.log(' -- SUCCESSFUL CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');
-
-                            services[name].service.connectionErr = false;
-                            services[name].service.err = null;
-                            createServiceAPI(services[name], data); 
-
-                            if(typeof services[name].onLoad === 'function'){
-                                services[name].onLoad()
-                            }                                           
-                        }
-                        if(typeof next === 'function'){next()}                    
-                    })*/
                 }
             }
         }
