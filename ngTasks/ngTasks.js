@@ -580,68 +580,114 @@ var tasks = (function(window){
             return tasks 
         }    
 
-         function loadService(name, option, cb){   
-            
-            var uri = 'http://' + option.host +':'+ option.port + option.route       
-            if(services[name]){
-                //if the service already exists
-                throw "tasksJS ERROR: SERVICE NAMING CONFLICT!!! Two Services cannot be assigned the same name: " + name;                                
-            }
+        function loadService(name, option){   
+            var uri = 'http://' + option.host +':'+ option.port + option.route 
 
              services[name] = {                                                                            
                 dependents:[],
                 name:name,
-                uri:uri                            
-            }  
+                uri:uri,
+                connection_attemps:0,
+                service:{}                            
+            };  
 
-            initAsync.unshift(new getService(uri, name, cb).run)
+            initAsync.unshift(new getService(uri, name).run);
             setInit();
-            setInit();
+
+            _serv = name;
             return tasks
         }  
 
-        function getService(url, name, cb){
-                     
-            return {//run will be called by a mth
-                run:function(nextTask){                    
+        var _serv = undefined;
+        function onLoad(handler){    
+            services[_serv].onLoad = configHandler(handler).run;
+        }
+        
+        function getService(url, name){
+                 
+            return {//run will be called by the mth
+                run:function(next){
 
-                    _client.request({
+                    $.getJSON(url,function(){
+
+                    }).done(function(data){
+                        console.log(' -- SUCCESSFUL CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');
+
+                        services[name].service.connectionErr = false;
+                        services[name].service.err = null;
+                        createServiceAPI(services[name], data); 
+
+                        if(typeof services[name].onLoad === 'function'){
+                            services[name].onLoad()
+                        }
+                    }).fail(function(err){
+                        services[name].connection_attemps++;
+                        console.log(' -- FAILED CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');                                
+                        //console.log(err);
+                        //user can check for the existance of connectionErr property inside modules to check if the service has loaded correctly
+                        //so that the app can optionally be made to work even when some services fail                        
+                        services[name].service.connectionErr = true;
+                        services[name].service.err = err;
+
+                        //try to establish connection up to ten times
+                        if(services[name].connection_attemps < 10){                            
+                            setTimeout(function(){                                
+                                getService(url, name).run();                            
+                            }, services[name].connection_attemps*1500);
+                        }
+                    }).always(function(){
+                        if(typeof next === 'function'){next()} 
+                    })
+
+                    /*_client.request({
                         method:'GET',
                         url:url
                     }, function(err, data){
                         if (err) {
-                            console.log(err);
-                            //user can check fo the existance of connectionErr property inside modules to check if the service has loaded correctly
-                            //so that the app can optionally be made to work even when some services fail
-                            services[name].service = {connectionErr:true, data:err};
-                            if(typeof cb === 'function'){cb(err)};
-                        }else{                    
-                            //console.log(data);                                
-                            console.log(data)
-                            services[name].service = new createServiceAPI(data, name);
+                            services[name].connection_attemps++;
+                            console.log(' -- FAILED CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');                                
+                            //console.log(err);
+                            //user can check for the existance of connectionErr property inside modules to check if the service has loaded correctly
+                            //so that the app can optionally be made to work even when some services fail                        
+                            services[name].service.connectionErr = true;
+                            services[name].service.err = err;
+
+                            //try to establish connection up to ten times
+                            if(services[name].connection_attemps < 10){                            
+                                setTimeout(function(){                                
+                                    getService(url, name).run();                            
+                                }, services[name].connection_attemps*1500);
+                            }
                             
-                            if(typeof cb === 'function'){cb(null)}
+                        }else{                    
+                            console.log(' -- SUCCESSFUL CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');
+
+                            services[name].service.connectionErr = false;
+                            services[name].service.err = null;
+                            createServiceAPI(services[name], data); 
+
+                            if(typeof services[name].onLoad === 'function'){
+                                services[name].onLoad()
+                            }                                           
                         }
-                        nextTask();
-                    })
+                        if(typeof next === 'function'){next()}                    
+                    })*/
                 }
             }
-        }           
-
-        function createServiceAPI(apiMap, serviceName){
-            var service = {}, maps = apiMap.maps;
-            //each map in apiMaps.maps describes a backend serverMod
-            for (var i = 0; i < maps.length; i++) {
-                //serviceRequestHandler creates replica of the backend serverMod api 
-                //that will send a request to that serverMod's method
-                service[maps[i].modName] = new serviceRequestHandler(maps[i], apiMap.host, serviceName) 
-                
-            }
-
-            return service
         }
 
-        function serviceRequestHandler(map, host, serviceName){
+        function createServiceAPI(serviceHolder, api){
+
+            var service = serviceHolder.service, maps = api.maps;
+            //each map in apis.maps describes a backend serverMod
+            for (var i = 0; i < maps.length; i++) {
+                //serverModRequestHandler creates replica of the backend serverMod api 
+                //that will send a request to that serverMod's method
+                service[maps[i].modName] = new serverModRequestHandler(maps[i], api.host, serviceHolder.name)             
+            }        
+        }
+
+        function serverModRequestHandler(map, host, serviceName){
             //handles request to backend server mod
 
             //use map to regenerate backend  api
@@ -667,11 +713,23 @@ var tasks = (function(window){
                         //loop throuhg each serverMod in the service and use _updatePath method to update the route to the serverMod
                         services[serviceName].service[new_maps[i].modName]._updatePath(new_route, new_api.host, new_maps[i].nsp);
                     }
-                    //use this handle on reqHandler to resend request
-                    handler.run(req.data, function(err, data){
-                        callBack(err, data);
-                        attempts = 0;
-                    })                        
+
+                    if(typeof services[serviceName].onLoad === 'function'){
+                        //run onLoad Handler first
+                        services[serviceName].onLoad(function(){
+                            //use this handle on reqHandler to resend the request
+                            handler.run(req.data, function(err, data){
+                                callBack(err, data);
+                                attempts = 0;
+                            })
+                        })
+                    }else{
+                        //use this handle on reqHandler to resend the request
+                        handler.run(req.data, function(err, data){
+                            callBack(err, data);
+                            attempts = 0;
+                        })
+                    }                        
                 }              
             }            
             //paths used for single and multi file uploads
@@ -729,8 +787,10 @@ var tasks = (function(window){
 
             function dispatch(e){
                 if(eventHandlers[e.name]){
+                    e.received_by = appName;
+                    e.received_at = Date();  
                     eventHandlers[e.name].subscribers.forEach(function(sub){
-                        sub(e.data, e)
+                        sub(e);
                     })
                 }
             }
@@ -749,6 +809,8 @@ var tasks = (function(window){
                 }, function(err, new_api){
                     if(err){
                         console.log(err)
+                        //pass the job onto getService function   
+                        getService(services[serviceName].uri, serviceName).run();
                     }else{
                         var new_maps = new_api.maps;
 
@@ -759,9 +821,14 @@ var tasks = (function(window){
                             //loop throuhg each serverMod in the service and use _updatePath method to update the route to the serverMod
                             services[serviceName].service[new_maps[i].modName]._updatePath(new_route, new_api.host, new_maps[i].nsp);
                         }
+
+                        if(typeof services[serviceName].onLoad === 'function'){
+                            services[serviceName].onLoad()
+                        } 
                     }
                 })
             }
+
             function initSocketConnection(name_space){
                 var socket = io.connect(name_space)
                 console.log(map.nsp)
@@ -791,30 +858,31 @@ var tasks = (function(window){
            return serverMod
         }  
 
-        function configHandler(fn){
+        function configHandler(handler){
 
             return {//will be called by mth
-                run:function(config_cb){
-                    //if config is used config_cb needs to be called for app to start
+                run:function(next){
+                    //if config is used next needs to be called for app to start
 
-                    var configModule = {}
+                    var configMod = {}                
                     
-                    configModule.done = config_cb
-
-                    configModule.useService = function useService(serviceName){
-                        return services[serviceName].service
+                    configMod.next = function(){
+                        if(typeof next === 'function'){next()}
                     }
 
-                    fn.apply(configModule);
-                   /* if(configModule.devMode){console.log('TasksJS: - init');}
-                    if(configModule.devMode){console.log('TasksJS tasks.config: this.next() must be called in order to continue initializing <--');}*/
+                    configMod.done = configMod.next
+                    
+                    configMod.useService = function useService(serviceName){
+                        return services[serviceName].service;
+                    }
+
+                    handler.apply(configMod);
                 }
             }
         }
 
-        function config(fn){
-            initSync.unshift(new configHandler(fn).run)
-            setInit();
+        function config(handler){
+            initSync.unshift(new configHandler(handler).run)
             setInit();
             return tasks
         }
