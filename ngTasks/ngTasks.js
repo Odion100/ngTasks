@@ -340,7 +340,7 @@ var tasks = (function(window){
         }
 
         function initComponent(options){
-            
+            options.templateUrl = options.templateUrl.toLowerCase();
             var c =  obj(component_cache).findByKey('templateUrl', options.templateUrl)[0];
 
             if(c){
@@ -359,17 +359,19 @@ var tasks = (function(window){
         }
 
         function loadComponent(componentName, options){
-             initAsync.unshift(new componentLoader(componentName, options).run)
-             setInit();
-             return tasks
+            //ensure templateUrl is in lowcase to avoid case sensativity 
+            //when performing a search in another instance of the app int initComponent
+            options.templateUrl = options.templateUrl.toLowerCase();                
+            initAsync.unshift(new componentLoader(componentName, options).run)
+            setInit();
+            return tasks
         }
 
         function componentLoader(componentName, options){  
 
             return {
                 run:function(next){
-                    var $templateRequest = ngService('$templateRequest');
-                    var $compile = ngService('$compile');
+                    var $templateRequest = ngService('$templateRequest');                    
 
                     $templateRequest(options.templateUrl)
                     .then(function(template){
@@ -602,7 +604,7 @@ var tasks = (function(window){
         function onLoad(handler){    
             services[_serv].onLoad = configHandler(handler).run;
         }
-        
+
         function getService(url, name){
                  
             return {//run will be called by the mth
