@@ -348,7 +348,9 @@ var tasks = (function(window){
             }else{
                 thisComponent.templateUrl = options.templateUrl; 
                 thisComponent.isRoot = true;   
-            }                        
+            }   
+            setInit();
+            return tasks                     
         }
 
         function refreshComponents(){
