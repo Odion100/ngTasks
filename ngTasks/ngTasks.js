@@ -1,4 +1,24 @@
- 
+var PREFIX_REGEXP = /^((?:x|data)[:\-_])/i;
+var SPECIAL_CHARS_REGEXP = /[:\-_]+(.)/g;
+
+/**
+ * Converts all accepted directives format into proper directive name.
+ * @param name Name to normalize
+ */
+function normalize(name) {
+  return name
+    .replace(PREFIX_REGEXP, '')
+    .replace(SPECIAL_CHARS_REGEXP, fnCamelCaseReplace);
+}
+
+function fnCamelCaseReplace(all, letter) {
+  return letter.toUpperCase();
+}
+
+function denormalize(name){
+    return name.replace(/([A-Z])/g, function($1){return "-"+$1.toLowerCase();});
+}
+
 function randomStr(count){
     var text = ""; possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     count = count || Math.floor(Math.random() * 10) || 5;
@@ -306,10 +326,10 @@ var tasks = (function(window){
         })
     }        
     
-    var ngService = angular.injector(['ng', 'ngFileUpload']).get, component_cache = [], isRoot = true;             
+    var ngService = angular.injector(['ng', 'ngFileUpload']).get, component_cache = [], isRoot = true, templateNameSpace = {};             
     
     function tasks(){        
-        var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], scopes = [], initAsync = [], initSync = [], configModule ={};
+        var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], initAsync = [], initSync = [], configModule ={};
         var thisComponent = {}, loadedComponents = {}, onCompleteHandlers = [];        
 
         tasks.loadService = loadService;
@@ -329,13 +349,60 @@ var tasks = (function(window){
         }
         
         if(isRoot){
+            isRoot = false;     
+            
+            thisComponent.name = 'root';
+            thisComponent.name_space = 'root';  
+            thisComponent.scopes = [];     
+            component_cache.push(thisComponent);
             //The root component will initialize angularjs once all other components are loaded
-            isRoot = false;            
             onCompleteHandlers.unshift(initializeAngular)
         }
 
-        function initializeAngular(){
+        function initializeAngular(){                
+            _app.directive('scopeNsp', function($compile){
+                return {
+                    restrict : 'A',
+                    controller : "@",
+                    name:"scopeNsp",
+                    replace:false,  
+                    priority:1,
+                   // terminal:true,                   
+                    template:function(tElement, tAttrs){
+
+                        var names = tAttrs.scopeNsp.split('.');
+
+                        var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];
+                        var s = obj(c.scopes).findByKey('name', names[2])[0];
+                        
+                        return s.options.template;                      
+                    }/*,
+                    templateUrl:function(tElement, tAttrs){
+                        var names = tAttrs.scopeNsp.split('.');
+
+                        var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];
+                        var s = obj(c.scopes).findByKey('name', names[2])
+                        
+                        return s.options.templateUrl; 
+                    }*/          
+                }   
+            })
+
+            _app.directive('componentNsp', function($compile){
+                return {
+                    restrict : 'A',
+                    scope:{},   
+                    replace:false,                   
+                    name:"componentNsp",                     
+                    template:function(tElement, tAttrs){
+                       var c = obj(component_cache).findByKey('name_space', tAttrs.componentNsp)[0];
+                        return c.elemTemplate.innerHTML;   
+                    }          
+                }   
+            })
+
             configAngularApp(uiConfig);
+
             angular.bootstrap(document, ['ngTasks'])
         }
 
@@ -347,14 +414,14 @@ var tasks = (function(window){
                 thisComponent = c;
             }else{
                 thisComponent.templateUrl = options.templateUrl; 
-                thisComponent.isRoot = true;   
             }   
             setInit();
             return tasks                     
         }
 
         function refreshComponents(){
-            scopes.forEach(function(s){                        
+            console.log('you have to update refresh scope');
+            thisComponent.scopes.forEach(function(s){                        
                 var e = $(s.name)[0]
                 if(e){ angular.element(e).scope().$digest() };                
             })            
@@ -373,21 +440,42 @@ var tasks = (function(window){
 
             return {
                 run:function(next){
-                    var $templateRequest = ngService('$templateRequest');                    
+                    var $templateRequest = ngService('$templateRequest');      
 
-                    $templateRequest(options.templateUrl)
-                    .then(function(template){
+                    var c =  obj(component_cache).findByKey('templateUrl', options.templateUrl)[0];
 
-                        loadedComponents[componentName] = {
-                            templateUrl:options.templateUrl,
-                            onLoad:next
-                        };
-
-                        component_cache.push(loadedComponents[componentName]);
-
+                    if(c){
                         var elemTemplate = document.createElement('div');
 
+                        loadedComponents[componentName] = obj(c).cloneKeys();
+                        next();                     
+                    }else{
+                        $templateRequest(options.templateUrl)
+                        .then(templateProcessor, function(err){
+                            console.log(err);
+                            loadedComponents[componentName] = {err:err};
+                            next();
+                        })
+                    }             
+                        
+
+                    function templateProcessor(template){
+
+                        var elemTemplate = document.createElement('div');
                         elemTemplate.innerHTML = template;
+                        
+                        loadedComponents[componentName] = {
+                            templateUrl:options.templateUrl,
+                            elemTemplate:elemTemplate,
+                            initial_template:template,
+                            onLoad:next,
+                            name:componentName,
+                            name_space:thisComponent.name+"."+componentName,
+                            scopes:[]
+                        };
+
+                        component_cache.push(loadedComponents[componentName]);                        
+                            
                         //get all script tags
                         var scripts = elemTemplate.getElementsByTagName('script');
                         //load scripts separately from template
@@ -399,20 +487,36 @@ var tasks = (function(window){
                             //remove scripts from template
                             scripts[i].parentNode.removeChild(scripts[i]);
                         }
-         
-                        //apply template to angular component
-                        _app.component(componentName, {
-                            template:elemTemplate.innerHTML,
-                            controller:function($scope){                                
-                                //console.log('component loaded: '+componentName);
-                            }
-                        });                       
-                        
-                    }, function(err){
-                        console.log(err);
-                        loadedComponents[componentName] = {err:err};
-                        next();
-                    })
+
+
+                        if(thisComponent.name === 'root'){
+
+                             _app.directive(componentName, function($compile){
+                                return {
+                                    restrict : 'E',
+                                    replace:false,                                                             
+                                    terminal: false,
+                                    priority: 1000,
+                                    link: function (scope, element, attrs) {  
+                                        if(attrs.componentNsp){
+                                            return false
+                                        }                                    
+                                        attrs.$set('component-nsp', 'root.'+componentName)
+                                        $compile(element)(scope);
+                                    }        
+                                }  
+                            })
+
+                        }else{                            
+                             //add componentNsp attribute to the
+                             var componentElements = thisComponent.elemTemplate.getElementsByTagName(denormalize(componentName));
+
+                            for (var i = 0; i < componentElements.length; i++) {
+                                componentElements[i].setAttribute('component-nsp', thisComponent.name+"."+componentName)
+                            }                           
+                        }
+                                                
+                    }
                 }
             }                                    
         }        
@@ -445,32 +549,35 @@ var tasks = (function(window){
             function useScope(){
 
             }
+
             mod.scopeConstructor.apply(thisMod, []);
             //add the scope to thisComponent object
-            thisComponent[mod.name] = thisMod;
+            //thisComponent.scope[mod.name] = thisMod;
 
-            scopeInitializer(mod.name, thisMod, mod.options);
+            new scopeInitializer(mod.name, thisMod, mod.options);
             thisMod.useModule = null;        
             thisMod.useService = null; 
             thisMod.useComponent = null;
         }
         
-        function scopeInitializer(name, scopeMod, options){
-            _app.directive(name, function(){                   
-                return {
-                    restrict : "E",
-                    template:options.template,
-                    templateUrl:options.templateUrl,
-                    controller:function($scope){                        
-                        $scope[name] = scopeMod;
-                    }   
-                }
-            })
+        function scopeInitializer(name, scopeMod, options){            
+
+            var scopeElements = thisComponent.elemTemplate.getElementsByTagName(denormalize(name));
+            
+            var ns = thisComponent.name_space+'.'+name;
+
+            for (var i = 0; i < scopeElements.length; i++) {
+                scopeElements[i].setAttribute('scope-nsp', ns);
+            }
+
+            _app.controller(ns, function($scope){
+                $scope[name] = scopeMod;
+            });         
         } 
 
         function addScope(componentName, scopeConstructor, options){    
             options  = options || {};
-            scopes.push({
+            thisComponent.scopes.push({
                 name:componentName, 
                 options:options,
                 scopeConstructor:scopeConstructor,                
@@ -488,9 +595,9 @@ var tasks = (function(window){
             for (var i = 0; i < mods.length; i++) {                
                 modFactory(mods[i]);                
             }
-
-            for (var i = 0; i < scopes.length; i++) {
-                scopeFactory(scopes[i]);
+            
+            for (var i = 0; i < thisComponent.scopes.length; i++) {
+                scopeFactory(thisComponent.scopes[i]);
             }
             
             //by clearing these arrays more modules can be added after the original initialization
