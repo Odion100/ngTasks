@@ -17,8 +17,7 @@ function fnCamelCaseReplace(all, letter) {
 
 function denormalize(name){
     return name.replace(/([A-Z])/g, function($1){return "-"+$1.toLowerCase();});
-}
-
+};
 function randomStr(count){
     var text = ""; possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     count = count || Math.floor(Math.random() * 10) || 5;
@@ -412,6 +411,7 @@ var tasks = (function(window){
 
             if(c){
                 thisComponent = c;
+                thisComponent.createClone = cloneComponent;
             }else{
                 thisComponent.templateUrl = options.templateUrl; 
             }   
@@ -436,6 +436,22 @@ var tasks = (function(window){
             return tasks
         }
 
+        function cloneComponent(c, cb){
+            
+            c.scopes.forEach(function(_scope){
+                scopeFactory(_scope, c)
+            })
+            var arr = [];
+            obj(loadedComponents).forEach(function(value, name){
+                arr.push(componentLoader(name, value).run)
+            })
+
+            multiTaskHandler()
+            .addMultiTaskAsync(arr)
+            .runTasks(function(){
+                cb();
+            })
+        }
         function componentLoader(componentName, options){  
 
             return {
@@ -446,9 +462,23 @@ var tasks = (function(window){
 
                     if(c){
                         var elemTemplate = document.createElement('div');
+                        elemTemplate.innerHTML = c.initial_template
 
-                        loadedComponents[componentName] = obj(c).cloneKeys();
-                        next();                     
+                        loadedComponents[componentName] = {
+                            templateUrl:options.templateUrl,
+                            elemTemplate:elemTemplate,
+                            initial_template:c.initial_template,
+                            onLoad:next,
+                            name:componentName,
+                            name_space:thisComponent.name+"."+componentName,
+                            scopes:c.scopes,
+                            createClone:c.createClone
+                        };
+
+                        component_cache.push(loadedComponents[componentName]); 
+
+                       c.createClone(loadedComponents[componentName], next);
+                       new componentInitializer(componentName)                      
                     }else{
                         $templateRequest(options.templateUrl)
                         .then(templateProcessor, function(err){
@@ -489,39 +519,41 @@ var tasks = (function(window){
                         }
 
 
-                        if(thisComponent.name === 'root'){
-
-                             _app.directive(componentName, function($compile){
-                                return {
-                                    restrict : 'E',
-                                    replace:false,                                                             
-                                    terminal: false,
-                                    priority: 1000,
-                                    link: function (scope, element, attrs) {  
-                                        if(attrs.componentNsp){
-                                            return false
-                                        }                                    
-                                        attrs.$set('component-nsp', 'root.'+componentName)
-                                        $compile(element)(scope);
-                                    }        
-                                }  
-                            })
-
-                        }else{                            
-                             //add componentNsp attribute to the
-                             var componentElements = thisComponent.elemTemplate.getElementsByTagName(denormalize(componentName));
-
-                            for (var i = 0; i < componentElements.length; i++) {
-                                componentElements[i].setAttribute('component-nsp', thisComponent.name+"."+componentName)
-                            }                           
-                        }
+                        new componentInitializer(componentName);
                                                 
                     }
                 }
             }                                    
         }        
+        function componentInitializer(componentName){
+             if(thisComponent.name === 'root'){
+                _app.directive(componentName, function($compile){
+                    return {
+                        restrict : 'E',
+                        replace:false,                                                             
+                        terminal: false,
+                        priority: 1000,
+                        link: function (scope, element, attrs) {  
+                            if(attrs.componentNsp){
+                                return false
+                            }                                    
+                            attrs.$set('component-nsp', 'root.'+componentName)
+                            $compile(element)(scope);
+                        }        
+                    }  
+                })
+                
 
-        function scopeFactory(mod){
+            }else{                            
+                 //add componentNsp attribute to the
+                 var componentElements = thisComponent.elemTemplate.getElementsByTagName(denormalize(componentName));
+
+                for (var i = 0; i < componentElements.length; i++) {
+                    componentElements[i].setAttribute('component-nsp', thisComponent.name+"."+componentName)
+                }                           
+            }
+        }
+        function scopeFactory(mod, _component){
 
             var thisMod = {};
             thisMod.useModule = useModule;        
@@ -554,17 +586,17 @@ var tasks = (function(window){
             //add the scope to thisComponent object
             //thisComponent.scope[mod.name] = thisMod;
 
-            new scopeInitializer(mod.name, thisMod, mod.options);
+            new scopeInitializer(mod.name, thisMod, mod.options, _component);
             thisMod.useModule = null;        
             thisMod.useService = null; 
             thisMod.useComponent = null;
         }
         
-        function scopeInitializer(name, scopeMod, options){            
-
-            var scopeElements = thisComponent.elemTemplate.getElementsByTagName(denormalize(name));
+        function scopeInitializer(name, scopeMod, options, _component){            
+            _component = _component || thisComponent;
+            var scopeElements = _component.elemTemplate.getElementsByTagName(denormalize(name));
             
-            var ns = thisComponent.name_space+'.'+name;
+            var ns = _component.name_space+'.'+name;
 
             for (var i = 0; i < scopeElements.length; i++) {
                 scopeElements[i].setAttribute('scope-nsp', ns);
