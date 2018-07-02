@@ -340,6 +340,10 @@ var tasks = (function(window){
         tasks.ngService = ngService    
         tasks.uiRouter = setUIConfig;
 
+        var thisComponent = {}
+        thisComponent.loaded_components = loadedComponents;  
+        thisComponent.scopes = []; 
+
         var uiConfig = undefined;
         function setUIConfig(handler){
             uiConfig = handler;
@@ -411,7 +415,7 @@ var tasks = (function(window){
 
             if(c){
                 thisComponent = c;
-                thisComponent.createClone = cloneComponent;
+                thisComponent.createClone = makeClone;
             }else{
                 thisComponent.templateUrl = options.templateUrl; 
             }   
@@ -436,14 +440,15 @@ var tasks = (function(window){
             return tasks
         }
 
-        function cloneComponent(c, cb){
+        function makeClone(c, cb){
             
             c.scopes.forEach(function(_scope){
                 scopeFactory(_scope, c)
             })
             var arr = [];
             obj(loadedComponents).forEach(function(value, name){
-                arr.push(componentLoader(name, value).run)
+                arr.push(componentLoader(name, value, c).run)
+                
             })
 
             multiTaskHandler()
@@ -452,81 +457,89 @@ var tasks = (function(window){
                 cb();
             })
         }
-        function componentLoader(componentName, options){  
-
+        function componentLoader(componentName, options, _component){  
+            var _component = _component || thisComponent
             return {
                 run:function(next){
                     var $templateRequest = ngService('$templateRequest');      
+                    
 
                     var c =  obj(component_cache).findByKey('templateUrl', options.templateUrl)[0];
 
+
+                    loadedComponents[componentName] = {
+                        templateUrl:options.templateUrl,
+                        onLoad:next,
+                        name:componentName,
+                        name_space:_component.name+"."+componentName,
+                        scopes:[]
+                    };
+                    component_cache.push(loadedComponents[componentName]);
+                    console.log(thisComponent)
                     if(c){
-                        var elemTemplate = document.createElement('div');
-                        elemTemplate.innerHTML = c.initial_template
 
-                        loadedComponents[componentName] = {
-                            templateUrl:options.templateUrl,
-                            elemTemplate:elemTemplate,
-                            initial_template:c.initial_template,
-                            onLoad:next,
-                            name:componentName,
-                            name_space:thisComponent.name+"."+componentName,
-                            scopes:c.scopes,
-                            createClone:c.createClone
-                        };
+                        if(c.scopes.length === 0){
+                            var _next = c.onLoad;
 
-                        component_cache.push(loadedComponents[componentName]); 
+                            c.onLoad = function(){                                
+                                
+                                clone();
+                                _next();
+                            }    
+                        }else{
+                            clone();                            
+                        }
+                        
+                        function clone(){
+                            var elemTemplate = document.createElement('div');
+                            elemTemplate.innerHTML = c.initial_template
 
-                       c.createClone(loadedComponents[componentName], next);
-                       new componentInitializer(componentName)                      
+                            loadedComponents[componentName].scopes = c.scopes;
+                            loadedComponents[componentName].createClone = c.createClone;
+                            loadedComponents[componentName].elemTemplate = elemTemplate;
+                            loadedComponents[componentName].initial_template = c.initial_template;                        
+
+                           c.createClone(loadedComponents[componentName], next);
+                           new componentInitializer(componentName, _component)
+                        }
+                       
                     }else{
-                        $templateRequest(options.templateUrl)
-                        .then(templateProcessor, function(err){
+                        
+                        $templateRequest(options.templateUrl)                        
+                        .then(function(template){
+
+                            var elemTemplate = document.createElement('div');
+                            elemTemplate.innerHTML = template;
+                            loadedComponents[componentName].elemTemplate = elemTemplate;
+                            loadedComponents[componentName].initial_template = template;                                                                        
+                                
+                            //get all script tags
+                            var scripts = elemTemplate.getElementsByTagName('script');
+                            //load scripts separately from template
+                            for (var i = 0; i < scripts.length; i++) {                            
+                                var script = document.createElement('script');
+                                script.setAttribute('src', scripts[i].src);
+                                //insert scripts into document
+                                document.body.appendChild(script);
+                                //remove scripts from template
+                                scripts[i].parentNode.removeChild(scripts[i]);
+                            }
+
+
+                            new componentInitializer(componentName);
+                                                
+                    }, function(err){
                             console.log(err);
                             loadedComponents[componentName] = {err:err};
                             next();
                         })
-                    }             
-                        
-
-                    function templateProcessor(template){
-
-                        var elemTemplate = document.createElement('div');
-                        elemTemplate.innerHTML = template;
-                        
-                        loadedComponents[componentName] = {
-                            templateUrl:options.templateUrl,
-                            elemTemplate:elemTemplate,
-                            initial_template:template,
-                            onLoad:next,
-                            name:componentName,
-                            name_space:thisComponent.name+"."+componentName,
-                            scopes:[]
-                        };
-
-                        component_cache.push(loadedComponents[componentName]);                        
-                            
-                        //get all script tags
-                        var scripts = elemTemplate.getElementsByTagName('script');
-                        //load scripts separately from template
-                        for (var i = 0; i < scripts.length; i++) {                            
-                            var script = document.createElement('script');
-                            script.setAttribute('src', scripts[i].src);
-                            //insert scripts into document
-                            document.body.appendChild(script);
-                            //remove scripts from template
-                            scripts[i].parentNode.removeChild(scripts[i]);
-                        }
-
-
-                        new componentInitializer(componentName);
-                                                
-                    }
+                    }                                                         
                 }
             }                                    
         }        
-        function componentInitializer(componentName){
-             if(thisComponent.name === 'root'){
+        function componentInitializer(componentName, _component){
+            _component = _component || thisComponent;
+             if(_component.name === 'root'){
                 _app.directive(componentName, function($compile){
                     return {
                         restrict : 'E',
@@ -546,10 +559,10 @@ var tasks = (function(window){
 
             }else{                            
                  //add componentNsp attribute to the
-                 var componentElements = thisComponent.elemTemplate.getElementsByTagName(denormalize(componentName));
+                 var componentElements = _component.elemTemplate.getElementsByTagName(denormalize(componentName));
 
                 for (var i = 0; i < componentElements.length; i++) {
-                    componentElements[i].setAttribute('component-nsp', thisComponent.name+"."+componentName)
+                    componentElements[i].setAttribute('component-nsp', _component.name+"."+componentName)
                 }                           
             }
         }
