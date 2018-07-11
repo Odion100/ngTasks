@@ -1,23 +1,4 @@
-var PREFIX_REGEXP = /^((?:x|data)[:\-_])/i;
-var SPECIAL_CHARS_REGEXP = /[:\-_]+(.)/g;
 
-/**
- * Converts all accepted directives format into proper directive name.
- * @param name Name to normalize
- */
-function normalize(name) {
-  return name
-    .replace(PREFIX_REGEXP, '')
-    .replace(SPECIAL_CHARS_REGEXP, fnCamelCaseReplace);
-}
-
-function fnCamelCaseReplace(all, letter) {
-  return letter.toUpperCase();
-}
-
-function denormalize(name){
-    return name.replace(/([A-Z])/g, function($1){return "-"+$1.toLowerCase();});
-};
 function randomStr(count){
     var text = ""; possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     count = count || Math.floor(Math.random() * 10) || 5;
@@ -296,7 +277,27 @@ function multiTaskHandler(mthModContructor, tasksList){
 }
 
 
-var tasks = (function(window){       
+var tasks = (function(window){  
+    var PREFIX_REGEXP = /^((?:x|data)[:\-_])/i;
+    var SPECIAL_CHARS_REGEXP = /[:\-_]+(.)/g;
+
+    /**
+     * Converts all accepted directives format into proper directive name.
+     * @param name Name to normalize
+     */
+    function normalize(name) {
+      return name
+        .replace(PREFIX_REGEXP, '')
+        .replace(SPECIAL_CHARS_REGEXP, fnCamelCaseReplace);
+    }
+
+    function fnCamelCaseReplace(all, letter) {
+      return letter.toUpperCase();
+    }
+
+    function denormalize(name){
+        return name.replace(/([A-Z])/g, function($1){return "-"+$1.toLowerCase();});
+    };     
     var _app = angular.module('ngTasks', ['ui.router'])
 
     function configAngularApp(uiConfig){
@@ -329,7 +330,7 @@ var tasks = (function(window){
     
     function tasks(){        
         var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], initAsync = [], initSync = [], configModule ={};
-        var thisComponent = {}, loadedComponents = {}, onCompleteHandlers = [];        
+        var thisComponent = {}, onCompleteHandlers = [];        
 
         tasks.loadService = loadService;
         tasks.module = addModule;                
@@ -341,8 +342,9 @@ var tasks = (function(window){
         tasks.uiRouter = setUIConfig;
 
         var thisComponent = {}
-        thisComponent.loaded_components = loadedComponents;  
-        thisComponent.scopes = []; 
+        thisComponent.loadedComponents = {};  
+        thisComponent.scopes = {};
+        thisComponent.scopeMods = {}; 
 
         var uiConfig = undefined;
         function setUIConfig(handler){
@@ -355,8 +357,7 @@ var tasks = (function(window){
             isRoot = false;     
             
             thisComponent.name = 'root';
-            thisComponent.name_space = 'root';  
-            thisComponent.scopes = [];     
+            thisComponent.name_space = 'root';              
             component_cache.push(thisComponent);
             //The root component will initialize angularjs once all other components are loaded
             onCompleteHandlers.unshift(initializeAngular)
@@ -375,16 +376,13 @@ var tasks = (function(window){
 
                         var names = tAttrs.scopeNsp.split('.');
 
-                        var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];
-                        var s = obj(c.scopes).findByKey('name', names[2])[0];
-                        
+                        var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];                        
+                        var s = c.scopes[names[2]];
                         return s.options.template;                      
                     }/*,
                     templateUrl:function(tElement, tAttrs){
                         var names = tAttrs.scopeNsp.split('.');
 
-                        var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];
-                        var s = obj(c.scopes).findByKey('name', names[2])
                         
                         return s.options.templateUrl; 
                     }*/          
@@ -415,7 +413,7 @@ var tasks = (function(window){
 
             if(c){
                 thisComponent = c;
-                thisComponent.createClone = makeClone;
+                thisComponent.createClone = createClone;
             }else{
                 thisComponent.templateUrl = options.templateUrl; 
             }   
@@ -425,7 +423,7 @@ var tasks = (function(window){
 
         function refreshComponents(){
             console.log('you have to update refresh scope');
-            thisComponent.scopes.forEach(function(s){                        
+            obj(thisComponent.scopes).forEach(function(s){                        
                 var e = $(s.name)[0]
                 if(e){ angular.element(e).scope().$digest() };                
             })            
@@ -440,13 +438,13 @@ var tasks = (function(window){
             return tasks
         }
 
-        function makeClone(c, cb){
+        function createClone(c, cb){
             
-            c.scopes.forEach(function(_scope){
+            obj(c.scopes).forEach(function(_scope){
                 scopeFactory(_scope, c)
             })
             var arr = [];
-            obj(loadedComponents).forEach(function(value, name){
+            obj(thisComponent.loadedComponents).forEach(function(value, name){
                 arr.push(componentLoader(name, value, c).run)
                 
             })
@@ -467,18 +465,21 @@ var tasks = (function(window){
                     var c =  obj(component_cache).findByKey('templateUrl', options.templateUrl)[0];
 
 
-                    loadedComponents[componentName] = {
+                    _component.loadedComponents[componentName] = {
                         templateUrl:options.templateUrl,
                         onLoad:next,
                         name:componentName,
                         name_space:_component.name+"."+componentName,
-                        scopes:[]
+                        scopes:{},
+                        scopeMods:{},
+                        loadedComponents:{}
                     };
-                    component_cache.push(loadedComponents[componentName]);
+                    component_cache.push(_component.loadedComponents[componentName]);
                     console.log(thisComponent)
                     if(c){
+                        var scopeArr = Object.getOwnPropertyNames(c.scopes);
 
-                        if(c.scopes.length === 0){
+                        if(scopeArr.length === 0){
                             var _next = c.onLoad;
 
                             c.onLoad = function(){                                
@@ -494,12 +495,12 @@ var tasks = (function(window){
                             var elemTemplate = document.createElement('div');
                             elemTemplate.innerHTML = c.initial_template
 
-                            loadedComponents[componentName].scopes = c.scopes;
-                            loadedComponents[componentName].createClone = c.createClone;
-                            loadedComponents[componentName].elemTemplate = elemTemplate;
-                            loadedComponents[componentName].initial_template = c.initial_template;                        
+                            _component.loadedComponents[componentName].scopes = c.scopes;
+                            _component.loadedComponents[componentName].createClone = c.createClone;
+                            _component.loadedComponents[componentName].elemTemplate = elemTemplate;
+                            _component.loadedComponents[componentName].initial_template = c.initial_template;                        
 
-                           c.createClone(loadedComponents[componentName], next);
+                           c.createClone(_component.loadedComponents[componentName], next);
                            new componentInitializer(componentName, _component)
                         }
                        
@@ -510,8 +511,8 @@ var tasks = (function(window){
 
                             var elemTemplate = document.createElement('div');
                             elemTemplate.innerHTML = template;
-                            loadedComponents[componentName].elemTemplate = elemTemplate;
-                            loadedComponents[componentName].initial_template = template;                                                                        
+                            _component.loadedComponents[componentName].elemTemplate = elemTemplate;
+                            _component.loadedComponents[componentName].initial_template = template;                                                                        
                                 
                             //get all script tags
                             var scripts = elemTemplate.getElementsByTagName('script');
@@ -530,7 +531,7 @@ var tasks = (function(window){
                                                 
                     }, function(err){
                             console.log(err);
-                            loadedComponents[componentName] = {err:err};
+                            _component.loadedComponents[componentName] = {err:err};
                             next();
                         })
                     }                                                         
@@ -567,24 +568,24 @@ var tasks = (function(window){
             }
         }
         function scopeFactory(mod, _component){
-
+            _component = _component || thisComponent;
             var thisMod = {};
             thisMod.useModule = useModule;        
             thisMod.useService = useService; 
             thisMod.useComponent = useComponent;
             thisMod.useConfig = useConfig;
-            thisMod.useScope = useScope;
+            /*thisMod.useScope = useScope;*/
 
             function useService(serviceName){
                 return passService(serviceName, mod);                      
             }
 
             function useModule(modToUse){              
-                return getMod(modToUse, mod);                        
+                _component.modules[modToUse]                       
             }         
 
             function useComponent(name){
-                return loadedComponents[name]
+                return (_component.loadedComponents[name])?_component.loadedComponents[name].scopeMods : {};
             }
 
             function useConfig(){
@@ -597,16 +598,16 @@ var tasks = (function(window){
 
             mod.scopeConstructor.apply(thisMod, []);
             //add the scope to thisComponent object
-            //thisComponent.scope[mod.name] = thisMod;
+            _component.scopeMods[mod.name] = thisMod;
 
             new scopeInitializer(mod.name, thisMod, mod.options, _component);
             thisMod.useModule = null;        
             thisMod.useService = null; 
-            thisMod.useComponent = null;
+            thisMod.useComponent = null;            
         }
         
         function scopeInitializer(name, scopeMod, options, _component){            
-            _component = _component || thisComponent;
+
             var scopeElements = _component.elemTemplate.getElementsByTagName(denormalize(name));
             
             var ns = _component.name_space+'.'+name;
@@ -622,14 +623,14 @@ var tasks = (function(window){
 
         function addScope(componentName, scopeConstructor, options){    
             options  = options || {};
-            thisComponent.scopes.push({
+            thisComponent.scopes[componentName] = {
                 name:componentName, 
                 options:options,
                 scopeConstructor:scopeConstructor,                
                 dependencies:[],
                 dependents:[],
                 service_dependencies:[]                
-            })
+            }
             
             setInit();
             return tasks
@@ -641,9 +642,9 @@ var tasks = (function(window){
                 modFactory(mods[i]);                
             }
             
-            for (var i = 0; i < thisComponent.scopes.length; i++) {
-                scopeFactory(thisComponent.scopes[i]);
-            }
+            obj(thisComponent.scopes).forEach(function(s){
+                scopeFactory(s);
+            })            
             
             //by clearing these arrays more modules can be added after the original initialization
             initSync = [];
@@ -660,7 +661,9 @@ var tasks = (function(window){
             return services[serviceName].service; 
         }
         
-        function modFactory(mod){
+        function modFactory(mod, _component){
+            var _component = _component || thisComponent;
+
             var thisMod = {}, events = {};     
             thisMod.useModule = useModule;        
             thisMod.useService = useService;
@@ -679,11 +682,11 @@ var tasks = (function(window){
             }
 
             function useModule(modToUse){              
-                return getMod(modToUse, mod);                        
+                return _component.modules[modToUse];                        
             }        
 
             function useComponent(name){
-                return loadedComponents[name]
+                return (_component.loadedComponents[name])?_component.loadedComponents[name].scopeMods : {};
             }
 
             function useConfig(){
@@ -704,7 +707,8 @@ var tasks = (function(window){
             }
 
             mod.modConstructor.apply(thisMod, []);
-            modules[mod.name].mod = thisMod;         
+            modules[mod.name].mod = thisMod;
+            _component.modules[mod.name] = thisMod;         
         }
 
 
