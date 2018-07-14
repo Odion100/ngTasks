@@ -344,7 +344,8 @@ var tasks = (function(window){
         var thisComponent = {}
         thisComponent.loadedComponents = {};  
         thisComponent.scopes = {};
-        thisComponent.scopeMods = {}; 
+        thisComponent.scopeMods = {};
+        thisComponent.modules = {}; 
 
         var uiConfig = undefined;
         function setUIConfig(handler){
@@ -472,7 +473,8 @@ var tasks = (function(window){
                         name_space:_component.name+"."+componentName,
                         scopes:{},
                         scopeMods:{},
-                        loadedComponents:{}
+                        loadedComponents:{},
+                        modules:{}
                     };
                     component_cache.push(_component.loadedComponents[componentName]);
                     console.log(thisComponent)
