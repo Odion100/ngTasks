@@ -476,7 +476,7 @@ var tasks = (function(window){
                         loadedComponents:{},
                         modules:{}
                     };
-                    
+
                     component_cache.push(_component.loadedComponents[componentName]);
                     
                     if(c){
@@ -584,14 +584,27 @@ var tasks = (function(window){
 
             }
 
-            mod.scopeConstructor.apply(thisMod, []);
-            //add the scope to thisComponent object
-            _component.scopeMods[mod.name] = thisMod;
+            //new scopeInitializer(mod.name, thisMod, mod.options, _component);
 
-            new scopeInitializer(mod.name, thisMod, mod.options, _component);
-            thisMod.useModule = null;        
-            thisMod.useService = null; 
-            thisMod.useComponent = null;            
+            var scopeElements = _component.elemTemplate.getElementsByTagName(denormalize(mod.name));
+            var ns = _component.name_space+'.'+mod.name;
+
+            for (var i = 0; i < scopeElements.length; i++) {
+                scopeElements[i].setAttribute('scope-nsp', ns);
+            }
+
+            _app.controller(ns, function($scope){
+                mod.scopeConstructor.apply(thisMod, []);
+
+                $scope[mod.name] = thisMod;
+                //add the scope to thisComponent object
+                _component.scopeMods[mod.name] = thisMod;
+
+                /*thisMod.useModule = null;        
+                thisMod.useService = null; 
+                thisMod.useComponent = null; */      
+            });
+                     
         }
         
         function scopeInitializer(name, scopeMod, options, _component){            
