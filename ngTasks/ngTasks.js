@@ -439,22 +439,22 @@ var tasks = (function(window){
             return tasks
         }
 
-        function createClone(c, cb){
-            
-            obj(c.scopes).forEach(function(_scope){
-                scopeFactory(_scope, c)
-            })
-            var arr = [];
-            obj(thisComponent.loadedComponents).forEach(function(value, name){
-                arr.push(componentLoader(name, value, c).run)
-                
-            })
+        function createClone(c){            
+            onCompleteHandlers.push(()=>{
+                obj(c.scopes).forEach(function(_scope){
+                    scopeFactory(_scope, c)
+                })
+                var arr = [];
+                obj(thisComponent.loadedComponents).forEach(function(value, name){
+                    arr.push(componentLoader(name, value, c).run)
+                    
+                })
 
-            multiTaskHandler()
-            .addMultiTaskAsync(arr)
-            .runTasks(function(){
-                cb();
+                multiTaskHandler()
+                .addMultiTaskAsync(arr)
+                .runTasks()
             })
+                
         }
         function componentLoader(componentName, options, _component){  
             var _component = _component || thisComponent
@@ -476,36 +476,22 @@ var tasks = (function(window){
                         loadedComponents:{},
                         modules:{}
                     };
+                    
                     component_cache.push(_component.loadedComponents[componentName]);
-                    console.log(thisComponent)
+                    
                     if(c){
-                        var scopeArr = Object.getOwnPropertyNames(c.scopes);
-
-                        if(scopeArr.length === 0){
-                            var _next = c.onLoad;
-
-                            c.onLoad = function(){                                
-                                
-                                clone();
-                                _next();
-                            }    
-                        }else{
-                            clone();                            
-                        }
                         
-                        function clone(){
-                            var elemTemplate = document.createElement('div');
-                            elemTemplate.innerHTML = c.initial_template
+                        var elemTemplate = document.createElement('div');
+                        elemTemplate.innerHTML = c.initial_template
 
-                            _component.loadedComponents[componentName].scopes = c.scopes;
-                            _component.loadedComponents[componentName].createClone = c.createClone;
-                            _component.loadedComponents[componentName].elemTemplate = elemTemplate;
-                            _component.loadedComponents[componentName].initial_template = c.initial_template;                        
+                        _component.loadedComponents[componentName].scopes = c.scopes;
+                        _component.loadedComponents[componentName].createClone = c.createClone;
+                        _component.loadedComponents[componentName].elemTemplate = elemTemplate;
+                        _component.loadedComponents[componentName].initial_template = c.initial_template;                        
 
-                           c.createClone(_component.loadedComponents[componentName], next);
-                           new componentInitializer(componentName, _component)
-                        }
-                       
+                       c.createClone(_component.loadedComponents[componentName]);
+                       new componentInitializer(componentName, _component)
+                       next();                                            
                     }else{
                         
                         $templateRequest(options.templateUrl)                        
@@ -583,7 +569,7 @@ var tasks = (function(window){
             }
 
             function useModule(modToUse){              
-                _component.modules[modToUse]                       
+                return getMod(modToUse)
             }         
 
             function useComponent(name){
@@ -684,7 +670,7 @@ var tasks = (function(window){
             }
 
             function useModule(modToUse){              
-                return _component.modules[modToUse];                        
+                return getMod(modToUse)
             }        
 
             function useComponent(name){
@@ -709,8 +695,7 @@ var tasks = (function(window){
             }
 
             mod.modConstructor.apply(thisMod, []);
-            modules[mod.name].mod = thisMod;
-            _component.modules[mod.name] = thisMod;         
+            modules[mod.name].mod = thisMod;                
         }
 
 
