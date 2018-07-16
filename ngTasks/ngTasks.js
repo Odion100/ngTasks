@@ -479,19 +479,31 @@ var tasks = (function(window){
 
                     component_cache.push(_component.loadedComponents[componentName]);
                     
-                    if(c){
-                        
-                        var elemTemplate = document.createElement('div');
-                        elemTemplate.innerHTML = c.initial_template
+                    if(c){                                                
+                        if(c.createClone){
+                            var _next = c.onLoad;
 
-                        _component.loadedComponents[componentName].scopes = c.scopes;
-                        _component.loadedComponents[componentName].createClone = c.createClone;
-                        _component.loadedComponents[componentName].elemTemplate = elemTemplate;
-                        _component.loadedComponents[componentName].initial_template = c.initial_template;                        
+                            c.onLoad = function(){                                                                
+                                clone();
+                                _next();
+                            } 
+                        }else{
+                            clone();
+                        }
 
-                       c.createClone(_component.loadedComponents[componentName]);
-                       new componentInitializer(componentName, _component)
-                       next();                                            
+                        function clone(){
+                            var elemTemplate = document.createElement('div');
+                            elemTemplate.innerHTML = c.initial_template
+
+                            _component.loadedComponents[componentName].scopes = c.scopes;
+                            _component.loadedComponents[componentName].createClone = c.createClone;
+                            _component.loadedComponents[componentName].elemTemplate = elemTemplate;
+                            _component.loadedComponents[componentName].initial_template = c.initial_template;                        
+
+                           c.createClone(_component.loadedComponents[componentName]);
+                           new componentInitializer(componentName, _component)
+                           next();
+                        }                                            
                     }else{
                         
                         $templateRequest(options.templateUrl)                        
