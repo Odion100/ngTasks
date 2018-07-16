@@ -479,18 +479,20 @@ var tasks = (function(window){
 
                     component_cache.push(_component.loadedComponents[componentName]);
                     
-                    if(c){                                                
-                        if(c.createClone){
+                    if(c){
+
+                        if(!c.createClone){
                             var _next = c.onLoad;
 
-                            c.onLoad = function(){                                                                
+                            c.onLoad = function(){                                
+                                
                                 clone();
                                 _next();
-                            } 
+                            }
                         }else{
-                            clone();
+                            clone()
                         }
-
+                        
                         function clone(){
                             var elemTemplate = document.createElement('div');
                             elemTemplate.innerHTML = c.initial_template
@@ -503,7 +505,8 @@ var tasks = (function(window){
                            c.createClone(_component.loadedComponents[componentName]);
                            new componentInitializer(componentName, _component)
                            next();
-                        }                                            
+                        }
+                                                                        
                     }else{
                         
                         $templateRequest(options.templateUrl)                        
