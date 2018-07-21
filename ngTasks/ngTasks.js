@@ -928,8 +928,7 @@ var tasks = (function(window){
            var eventHandlers = {};
 
             function dispatch(e){
-                if(eventHandlers[e.name]){
-                    e.received_by = appName;
+                if(eventHandlers[e.name]){                    
                     e.received_at = Date();  
                     eventHandlers[e.name].subscribers.forEach(function(sub){
                         sub(e);
