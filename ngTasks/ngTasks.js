@@ -377,9 +377,16 @@ var tasks = (function(window){
 
                         var names = tAttrs.scopeNsp.split('.');
 
-                        var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];                        
-                        var s = c.scopes[names[2]];
-                        return s.options.template;                      
+                        if(names.length < 3){
+                            var c = obj(component_cache).findByKey('name_space', names[0])[0];                        
+                            var s = c.scopes[names[1]];
+                            return s.options.template; 
+                        }else{
+                            var c = obj(component_cache).findByKey('name_space', names[0]+'.'+names[1])[0];                        
+                            var s = c.scopes[names[2]];
+                            return s.options.template;     
+                        }
+                                             
                     }/*,
                     templateUrl:function(tElement, tAttrs){
                         var names = tAttrs.scopeNsp.split('.');
@@ -422,7 +429,8 @@ var tasks = (function(window){
             return tasks                     
         }
 
-        function refreshComponents(){            
+        function refreshComponents(){
+            console.log('you have to update refresh scope');
             obj(thisComponent.scopes).forEach(function(s){                        
                 var e = $(s.name)[0]
                 if(e){ angular.element(e).scope().$digest() };                
@@ -532,7 +540,7 @@ var tasks = (function(window){
                             new componentInitializer(componentName);
                                                 
                     }, function(err){
-                            console.log(err);
+                            
                             _component.loadedComponents[componentName] = {err:err};
                             next();
                         })
@@ -599,8 +607,11 @@ var tasks = (function(window){
             }
 
             //new scopeInitializer(mod.name, thisMod, mod.options, _component);
-
-            var scopeElements = _component.elemTemplate.getElementsByTagName(denormalize(mod.name));
+            if(_component.name_space === 'root'){
+                var scopeElements = document.getElementsByTagName(denormalize(mod.name));        
+            }else{
+                var scopeElements = _component.elemTemplate.getElementsByTagName(denormalize(mod.name));                
+            }
             var ns = _component.name_space+'.'+mod.name;
 
             for (var i = 0; i < scopeElements.length; i++) {
@@ -788,7 +799,7 @@ var tasks = (function(window){
                         if (err) {
                             services[name].connection_attemps++;
                             console.log(' -- FAILED CONNECTION TO SERVICE: '+name +'---(after '+services[name].connection_attemps+' attempts)');                                
-                            //console.log(err);
+                            //
                             //user can check for the existance of connectionErr property inside modules to check if the service has loaded correctly
                             //so that the app can optionally be made to work even when some services fail                        
                             services[name].service.connectionErr = true;
@@ -884,7 +895,7 @@ var tasks = (function(window){
                         //make sure data is empty object by default
                         function cb(err, data){
                             if (err) {
-                                console.log(err);
+                                
                                 if (err.invalidMap) {
                                     mapErrHandler(err, req, callBack, handler)                          
                                 }else{
@@ -948,8 +959,7 @@ var tasks = (function(window){
                     method:'GET',
                     url:services[serviceName].uri
                 }, function(err, new_api){
-                    if(err){
-                        console.log(err)
+                    if(err){                        
                         //pass the job onto getService function   
                         getService(services[serviceName].uri, serviceName).run();
                     }else{
@@ -1281,7 +1291,7 @@ var objHandler = function(obj){
     //replace this with on load fn
     /*_tasks.init(function(err){        
         if(err){
-            console.log(err);
+            
         }
     });*/
     return _tasks
