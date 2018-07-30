@@ -429,12 +429,8 @@ var tasks = (function(window){
             return tasks                     
         }
 
-        function refreshComponents(){
-            console.log('you have to update refresh scope');
-            obj(thisComponent.scopes).forEach(function(s){                        
-                var e = $(s.name)[0]
-                if(e){ angular.element(e).scope().$digest() };                
-            })            
+         function refreshComponents(){
+            angular.element($('body')).scope().$digest()                        
         }
 
         function loadComponent(componentName, options){
