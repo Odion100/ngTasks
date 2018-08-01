@@ -316,7 +316,7 @@ var tasks = (function(window){
                       
             }
         ])
-        .filter('$$unsafe', function($sce){ 
+        .filter('unsafe', function($sce){ 
             return function(data){
                 if(!isNaN(data) && data !== null){
                     data = data.toString();
@@ -324,10 +324,10 @@ var tasks = (function(window){
                 return $sce.trustAsHtml(data); 
             }
         })
-    }        
-    
-    var ngService = angular.injector(['ng', 'ngFileUpload']).get, component_cache = [], isRoot = true, templateNameSpace = {};             
-    
+    }            
+
+    var ngService = angular.injector(['ng', 'ngFileUpload']).get, component_cache = [], isRoot = true;
+
     function tasks(){        
         var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], initAsync = [], initSync = [], configModule ={};
         var thisComponent = {}, onCompleteHandlers = [];        
@@ -410,9 +410,25 @@ var tasks = (function(window){
                 }   
             })
 
+
+            _app.directive('root', function(){
+                return {
+                    restrict : 'E',
+                    scope:{},   
+                    replace:false,                                                       
+                    link:function(){
+                        //use this directive to ensure that scopes initialize only after all component templates are rendered                        
+                        for (var i = component_cache.length - 1; i >= 0; i--) {  
+                            var c = component_cache[i];
+                            obj(c.scopes).forEach((s, name)=>s.scopeConstructor.apply(c.scopeMods[name], []));
+                        }                        
+                    }          
+                }
+            })
             configAngularApp(uiConfig);
 
             angular.bootstrap(document, ['ngTasks'])
+
         }
 
         function initComponent(options){
@@ -430,11 +446,7 @@ var tasks = (function(window){
         }
 
         function refreshComponents(){
-            console.log('you have to update refresh scope');
-            obj(thisComponent.scopes).forEach(function(s){                        
-                var e = $(s.name)[0]
-                if(e){ angular.element(e).scope().$digest() };                
-            })            
+            angular.element($('body')).scope().$digest()                        
         }
 
         function loadComponent(componentName, options){
@@ -577,6 +589,7 @@ var tasks = (function(window){
                 }                           
             }
         }
+
         function scopeFactory(mod, _component){
             _component = _component || thisComponent;
             var thisMod = {};
@@ -584,7 +597,7 @@ var tasks = (function(window){
             thisMod.useService = useService; 
             thisMod.useComponent = useComponent;
             thisMod.useConfig = useConfig;
-            /*thisMod.useScope = useScope;*/
+            thisMod.useScope = useScope;
 
             function useService(serviceName){
                 return passService(serviceName, mod);                      
@@ -602,8 +615,8 @@ var tasks = (function(window){
                 return configModule
             }
 
-            function useScope(){
-
+            function useScope(name){
+                return _component.scopeMods[name]
             }
 
             //new scopeInitializer(mod.name, thisMod, mod.options, _component);
@@ -617,35 +630,16 @@ var tasks = (function(window){
             for (var i = 0; i < scopeElements.length; i++) {
                 scopeElements[i].setAttribute('scope-nsp', ns);
             }
+            
+            //add the scope to thisComponent object
+            _component.scopeMods[mod.name] = thisMod;            
 
-            _app.controller(ns, function($scope){
-                mod.scopeConstructor.apply(thisMod, []);
-
-                $scope[mod.name] = thisMod;
-                //add the scope to thisComponent object
-                _component.scopeMods[mod.name] = thisMod;
-
-                /*thisMod.useModule = null;        
-                thisMod.useService = null; 
-                thisMod.useComponent = null; */      
+            _app.controller(ns, function($scope){                
+                $scope[mod.name] = thisMod;                        
             });
                      
         }
-        
-        function scopeInitializer(name, scopeMod, options, _component){            
-
-            var scopeElements = _component.elemTemplate.getElementsByTagName(denormalize(name));
-            
-            var ns = _component.name_space+'.'+name;
-
-            for (var i = 0; i < scopeElements.length; i++) {
-                scopeElements[i].setAttribute('scope-nsp', ns);
-            }
-
-            _app.controller(ns, function($scope){
-                $scope[name] = scopeMod;
-            });         
-        } 
+    
 
         function addScope(componentName, scopeConstructor, options){    
             options  = options || {};
