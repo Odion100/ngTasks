@@ -580,7 +580,7 @@ var tasks = (function(window){
             thisMod.useService = useService; 
             thisMod.useComponent = useComponent;
             thisMod.useConfig = useConfig;
-            /*thisMod.useScope = useScope;*/
+            thisMod.useScope = useScope;
 
             function useService(serviceName){
                 return passService(serviceName, mod);                      
@@ -599,7 +599,7 @@ var tasks = (function(window){
             }
 
             function useScope(){
-
+                return _component.scopeMods[name]
             }
 
             //new scopeInitializer(mod.name, thisMod, mod.options, _component);
