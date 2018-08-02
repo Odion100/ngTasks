@@ -358,7 +358,8 @@ var tasks = (function(window){
             isRoot = false;     
             
             thisComponent.name = 'root';
-            thisComponent.name_space = 'root';              
+            thisComponent.name_space = 'root';
+            thisComponent.onLoad = []              
             component_cache.push(thisComponent);
             //The root component will initialize angularjs once all other components are loaded
             onCompleteHandlers.unshift(initializeAngular)
@@ -420,7 +421,9 @@ var tasks = (function(window){
                         //use this directive to ensure that scopes initialize only after all component templates are rendered                        
                         for (var i = component_cache.length - 1; i >= 0; i--) {  
                             var c = component_cache[i];
-                            obj(c.scopes).forEach((s, name)=>s.scopeConstructor.apply(c.scopeMods[name], []));
+                            obj(c.scopes).forEach((s, name)=>{
+                                s.scopeConstructor.apply(c.scopeMods[name], [])
+                            });
                         }                        
                     }          
                 }
@@ -459,21 +462,13 @@ var tasks = (function(window){
         }
 
         function createClone(c){            
-            onCompleteHandlers.push(()=>{
-                obj(c.scopes).forEach(function(_scope){
-                    scopeFactory(_scope, c)
-                })
-                var arr = [];
-                obj(thisComponent.loadedComponents).forEach(function(value, name){
-                    arr.push(componentLoader(name, value, c).run)
-                    
-                })
+            var arr = [];
 
-                multiTaskHandler()
-                .addMultiTaskAsync(arr)
-                .runTasks()
-            })
-                
+            obj(c.scopes).forEach((_scope)=>scopeFactory(_scope, c))
+
+            obj(thisComponent.loadedComponents).forEach((value, name)=>arr.push(componentLoader(name, value, c).run))
+
+            multiTaskHandler().addMultiTaskAsync(arr).runTasks()                    
         }
         function componentLoader(componentName, options, _component){  
             var _component = _component || thisComponent
@@ -487,7 +482,7 @@ var tasks = (function(window){
 
                     _component.loadedComponents[componentName] = {
                         templateUrl:options.templateUrl,
-                        onLoad:next,
+                        onLoad:[next],
                         name:componentName,
                         name_space:_component.name+"."+componentName,
                         scopes:{},
@@ -501,13 +496,7 @@ var tasks = (function(window){
                     if(c){
 
                         if(!c.createClone){
-                            var _next = c.onLoad;
-
-                            c.onLoad = function(){                                
-                                
-                                clone();
-                                _next();
-                            }
+                            c.onLoad.unshift(clone)
                         }else{
                             clone()
                         }
@@ -1048,15 +1037,9 @@ var tasks = (function(window){
             onCompleteHandlers.push(cb)
         }        
         function loadComplete(){
-            onCompleteHandlers.forEach(function(cb){
-                cb();               
-            });
-             
-
-            if(typeof thisComponent.onLoad === 'function'){
-                thisComponent.onLoad();
-                thisComponent.onLoad = null;
-            }
+            onCompleteHandlers.forEach((f)=>f());
+                         
+            thisComponent.onLoad.forEach((f)=>f());                        
         }
         setInit();
         return tasks
