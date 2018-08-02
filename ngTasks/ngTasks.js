@@ -996,21 +996,19 @@ var tasks = (function(window){
 
             return {//will be called by mth
                 run:function(next){
-                    //if config is used next needs to be called for app to start
-
-                    var configMod = {}                
+                    //if config is used next needs to be called for app to start                                   
                     
-                    configMod.next = function(){
+                    configModule.next = function(){
                         if(typeof next === 'function'){next()}
                     }
 
-                    configMod.done = configMod.next
+                    configModule.done = configModule.next
                     
-                    configMod.useService = function useService(serviceName){
+                    configModule.useService = function useService(serviceName){
                         return services[serviceName].service;
                     }
 
-                    handler.apply(configMod);
+                    handler.apply(configModule, [next]);
                 }
             }
         }
