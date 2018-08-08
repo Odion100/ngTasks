@@ -1,282 +1,3 @@
-
-function randomStr(count){
-    var text = ""; possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    count = count || Math.floor(Math.random() * 10) || 5;
-
-    for (var i = 0; i < count; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-
-    return text;
-}
-//multi Task handler Class
-//Async/sync task manager 
-function multiTaskHandler(mthModContructor, tasksList){
-    var mth, syncTasks, asyncTasks, mthModule = {}, additionalTasks = [],  _return; 
-    mth = this;
-
-    //use mthModConstructon to create mthModule 
-    if(typeof mthModContructor === 'function'){        
-        mthModContructor.apply(mthModule, []);
-        _return = mthModule._return; 
-    }
-         
-    tasksList = tasksList || {};
-    syncTasks = tasksList.syncTasks || Object.getOwnPropertyNames(mthModule);
-    asyncTasks = tasksList.asyncTasks || [];    
-   
-    //remove _return from tasksList
-    var r = syncTasks.indexOf('_return')
-    if(r > -1){syncTasks.splice(r, 1)}      
-        
-    function taskRunner(mainCallback, mthModule, syncTasks, asyncTasks){  
-    //console.log('_startTasks callBack: ' + mainCallback.toString())  
-
-        var taskRunner, i;
-        mainCallback = mainCallback || function(){}
-        taskRunner = this;                
-
-        if (syncTasks.indexOf('_endTasks') === -1) {syncTasks.push('_endTasks')}
-        if (asyncTasks.indexOf('_startTasks') === -1) {asyncTasks.unshift('_startTasks')}
-
-        mthModule._endTasks = function(err, results){
-            if(typeof mainCallback === 'function'){
-                if(err || results){
-                    mainCallback(err, results)
-                }else
-                if(typeof _return === 'function'){
-                    mainCallback(err, _return())
-                }else{
-                    mainCallback();
-                } 
-            }
-                
-            i = 0;
-            return
-        }  
-
-        mthModule._startTasks = function(callBack){          
-            callBack()
-        }            
-
-        i = 0;
-        //execute each task (function) in the syncTasks array/object
-        taskRunner.execSync = function(){    
-            var fn = mthModule[syncTasks[i]];                                            
-                                   
-            function cb(err){         
-                if(err){                
-                    if(typeof mainCallback === 'function'){mainCallback(err)}
-                    return false
-                }
-
-                i++
-                                    
-                taskRunner.execSync();              
-            }   
-
-            return fn(cb, mthModule._endTasks);                
-        }
-        
-        //create a new instance
-        taskRunner.execAsync = function(){
-            var cb_counter = 0, return_val;                                
-            
-            for (var i = 0; i < asyncTasks.length; i++) {                
-                tasks_fn(asyncTasks[i]);                                                                                   
-            }
-
-            function tasks_fn(taskName){            
-                var fn = mthModule[taskName]                
-
-                function cb(err){
-                    if(err){                
-                        if(typeof mainCallback === 'function'){mainCallback(err)}
-                        return false
-                    }
-                    //add the results to the correct property of the results obj                    
-                    cb_counter++; 
-
-                    //after running async tasks run sync tasks
-                    if(cb_counter >= asyncTasks.length){                     
-                        taskRunner.execSync();                            
-                    }
-                }
-
-                return_val = fn(cb, mthModule._endTasks); 
-            }    
-
-            return return_val
-        }
-
-        return taskRunner            
-    }
-
-    function isValidTaskList(tasksNames){
-
-        if(!(tasksNames instanceof Array)){
-            throw 'tasksJS ERROR: setTasks & setTasksAsync functions must pass an array of strings'
-        }
-
-        for (var i = 0; i < tasksNames.length; i++) {
-            if(!(mthModule[tasksNames[i]])){
-                return false
-            }            
-        }
-        return true
-    }
-    
-    mth.setTasks = function(syncList){        
-        syncList = (syncList) ? Array.from(syncList) :Object.getOwnPropertyNames(mthModule);
-
-        if(isValidTaskList(syncList)){
-            //creates an new instance of tasks if contstructor was passed on init
-            if(typeof mthModContructor === 'function'){
-                return new multiTaskHandler(mthModContructor, {syncTasks:syncList}) ;     
-            }else{
-                syncTasks = syncList;
-            }
-        }else{
-            throw 'tasksJS ERROR: multiTaskHandler Class ---> Invalid taskList!!!';
-        }   
-    }
-    
-    mth.setTasksAsync = function(asyncList, syncList){
-        syncList = (syncList) ? Array.from(syncList) : [];
-        asyncList = (asyncList) ? Array.from(asyncList) :Object.getOwnPropertyNames(mthModule);
-        
-        if(isValidTaskList(asyncList) && isValidTaskList(syncList)){
-            //creates an new instance of tasks if contstructor was passed on init
-            if(typeof mthModContructor === 'function'){
-                return new multiTaskHandler(mthModContructor, {syncTasks:syncList, asyncTasks:asyncList}) ;    
-            }else{
-                syncTasks = syncList;
-                asyncTasks = asyncList;
-            }
-        }else{
-            throw 'tasksJS ERROR: multiTaskHandler Class ---> Invalid taskList!!!';
-        }        
-    }
-
-    mth.runTasks = function(){
-        var args = [], callBack, i = 1, _mthModule = {};
-        //seperate the callBack from the remaining arguments
-        if(typeof arguments[0] === 'function'){
-            callBack = arguments[0];                        
-        }
-
-        for (i; i < arguments.length; i++) {
-            args.push(arguments[i])
-        }        
-        
-        if (args.length > 0 && typeof mthModContructor === 'function'){
-            //create new instance of the mthModule with new args
-            mthModContructor.apply(_mthModule, args);
-        }else{
-            _mthModule = mthModule;
-        }
-        
-        //add additional tasks to mthModule
-        for (var i = 0; i < additionalTasks.length; i++) {
-            _mthModule[additionalTasks[i].name] = additionalTasks[i].fn 
-        }                    
-
-       //create new instance of the taskRunner to run methods on the mthModule
-       return new taskRunner(callBack, _mthModule, syncTasks, asyncTasks).execAsync();          
-    }
-    
-    mth.addTask = function(name, fn){
-        name = name || randomStr();
-        additionalTasks.push({name:name, fn:fn})
-
-        if(syncTasks.indexOf('_endTasks') === syncTasks.length - 1){
-            syncTasks.pop();
-            syncTasks.push(name);
-            syncTasks.push('_endTasks');
-        }else{
-            syncTasks.push(name);    
-        }
-        
-        return mth
-    }
-
-    mth.addTaskAsync = function(name, fn){
-        name = name || randomStr();
-        additionalTasks.push({name:name, fn:fn})
-        asyncTasks.push(name);
-        return mth   
-    }
-    //tasks an array of random fns to add to syncTasks list
-    mth.addMultiTask = function(tasksArr){
-        for (var i = 0; i < tasksArr.length; i++) {
-            mth.addTask(null, tasksArr[i]);
-        }
-        return mth
-    }
-    //tasks an array of random fns to add to asyncTasks list
-    mth.addMultiTaskAsync = function(tasksArr){
-        for (var i = 0; i < tasksArr.length; i++) {
-            mth.addTaskAsync(null, tasksArr[i]);
-        }        
-        return mth
-    }
-
-    //if mth is initialzed without a construnction don't add setArgs fn
-    if(typeof mthModContructor === 'function'){
-        mth.setArgs = function(){
-            var args = [];
-            for (var i = 0; i < arguments.length; i++) {
-                args.push(arguments[i]);
-            }
-            //overwrite mthModule with new one with args
-            mthModContructor.apply(mthModule, args);
-            return mth
-        }    
-    }
-    
-
-    //a subscription will exect the syncTasks every x seconds
-    mth.createSubscription = function(seconds){
-        
-        var subscription = function(){
-            var runningSub;
-            
-            var interval = (seconds) ? seconds * 1000: 1000;
-            
-            this.start = function(){ 
-                var args = [], callBack, i = 1, _mthModule = {};
-                //seperate the callBack from the remaining arguments
-                if(typeof arguments[0] === 'function'){
-                    callBack = arguments[0];                        
-                }
-
-                for (i; i < arguments.length; i++) {
-                    args.push(arguments[i]);
-                }        
-                
-                if (args.length > 0 && typeof mthModContructor === 'function'){
-                    //create new mthModule with new args
-                    mthModContructor.apply(_mthModule, args);
-                }else{
-                    _mthModule = mthModule;
-                }
-                            
-               //use setInterval to run taskRunner on repeat                   
-                runningSub = setInterval(new taskRunner(callBack, _mthModule, syncTasks, asyncTasks).execAsync, interval); 
-            }
-
-            this.end = function(){                
-                clearInterval(runningSub);
-            }
-        }           
-
-        return new subscription()
-    }   
-    
-    return mth
-}
-
-
 var tasks = (function(window){  
     var PREFIX_REGEXP = /^((?:x|data)[:\-_])/i;
     var SPECIAL_CHARS_REGEXP = /[:\-_]+(.)/g;
@@ -1046,131 +767,131 @@ var tasks = (function(window){
     }
 
 
-var objHandler = function(obj){
-    var handler = {}
-    handler.cloneKeys = cloneKeys;
-    handler.uniqueKeys = uniqueKeys;
-    handler.sumOfKeys = sumOfKeys
-    handler.findByKey = findByKey;
-    handler.spliceByKey = spliceByKey;
-    handler.navigate = navigate;
+    var objHandler = function(obj){
+        var handler = {}
+        handler.cloneKeys = cloneKeys;
+        handler.uniqueKeys = uniqueKeys;
+        handler.sumOfKeys = sumOfKeys
+        handler.findByKey = findByKey;
+        handler.spliceByKey = spliceByKey;
+        handler.navigate = navigate;
 
-    if(!Array.isArray(obj)){
-        //obj(OBJ).forEach & obj(OBJ).forEachSync loops through each property on an object        
-        handler.forEach = function(cb, descend){
-            var pNames = Object.getOwnPropertyNames(obj), index = -1; 
-            if(typeof cb === 'function'){
-                pNames.forEach(function(pName){
-                    cb(obj[pName], pName)
-                })
-            }else{
-                throw "obj(ERR): obj(OBJ).forEach(CB) must take a callback function as its argument!"
-            }            
-        }  
-        handler.forEachSync = function(cb, descend){
-            var pNames = Object.getOwnPropertyNames(obj), index = -1;             
-            
-            function next(){            
-                index =index++;
-                cb(obj[pNames[index]], pNames, next);
-            }
-            next()
-        }      
-    }else{
-        //obj(OBJ).forEachSync loops through each index of an array
-        handler.forEachSync = function(cb, descend){
-            var index = (descend)? obj.length+1:-1;             
-            
-            function next(){                     
-                if(descend){
-                    index--
-                    var last = (index <= 0);
+        if(!Array.isArray(obj)){
+            //obj(OBJ).forEach & obj(OBJ).forEachSync loops through each property on an object        
+            handler.forEach = function(cb, descend){
+                var pNames = Object.getOwnPropertyNames(obj), index = -1; 
+                if(typeof cb === 'function'){
+                    pNames.forEach(function(pName){
+                        cb(obj[pName], pName)
+                    })
                 }else{
-                    index++
-                    var last = (index >= obj.length-1);
+                    throw "obj(ERR): obj(OBJ).forEach(CB) must take a callback function as its argument!"
+                }            
+            }  
+            handler.forEachSync = function(cb, descend){
+                var pNames = Object.getOwnPropertyNames(obj), index = -1;             
+                
+                function next(){            
+                    index =index++;
+                    cb(obj[pNames[index]], pNames, next);
                 }
-                  
-                if(index < obj.length && index > -1){                                        
-                    cb(obj[index], index, next, last);
-                }                       
+                next()
+            }      
+        }else{
+            //obj(OBJ).forEachSync loops through each index of an array
+            handler.forEachSync = function(cb, descend){
+                var index = (descend)? obj.length+1:-1;             
+                
+                function next(){                     
+                    if(descend){
+                        index--
+                        var last = (index <= 0);
+                    }else{
+                        index++
+                        var last = (index >= obj.length-1);
+                    }
+                      
+                    if(index < obj.length && index > -1){                                        
+                        cb(obj[index], index, next, last);
+                    }                       
+                }
+                next()
             }
-            next()
         }
-    }
 
 
-    function cloneKeys(keys, toObj){
-        var copy = toObj || {};
+        function cloneKeys(keys, toObj){
+            var copy = toObj || {};
 
-        var pNames = keys || Object.getOwnPropertyNames(obj);
+            var pNames = keys || Object.getOwnPropertyNames(obj);
+            
+            for (var i = 0; i < pNames.length; i++) {
+                copy[pNames[i]] = obj[pNames[i]];
+            } 
+
+            return copy
+        };
+
+        function uniqueKeys(key){
+            var uniqueList = [], arr = obj;
+            
+            for (var i = 0; i < arr.length; i++) {
+                if( uniqueList.indexOf(arr[i][key]) === -1 ){
+                    uniqueList.push(arr[i][key]);
+                }
+            }
+            return uniqueList
+        };
         
-        for (var i = 0; i < pNames.length; i++) {
-            copy[pNames[i]] = obj[pNames[i]];
-        } 
+        function sumOfKeys(key){
+            var sum = 0, arr = obj; 
 
-        return copy
-    };
+            for (var i = 0; i < arr.length; i++) {
+                var num = arr[i][key]*1
+                ; num = (isNaN(num))? 0:num; sum = sum + num 
+            } 
+            return sum
+        }    
+        function findByKey(key, searchArr, multi){
+            var searchArr = (Array.isArray(searchArr)) ? searchArr : [searchArr]
+            var results = [];
 
-    function uniqueKeys(key){
-        var uniqueList = [], arr = obj;
-        
-        for (var i = 0; i < arr.length; i++) {
-            if( uniqueList.indexOf(arr[i][key]) === -1 ){
-                uniqueList.push(arr[i][key]);
+            for (var i = 0; i < obj.length; i++) {
+                if(searchArr.indexOf(obj[i][key]) > -1 ) {
+                    results.push(obj[i]);
+                    if(!multi){break}
+                }
             }
-        }
-        return uniqueList
-    };
-    
-    function sumOfKeys(key){
-        var sum = 0, arr = obj; 
 
-        for (var i = 0; i < arr.length; i++) {
-            var num = arr[i][key]*1
-            ; num = (isNaN(num))? 0:num; sum = sum + num 
-        } 
-        return sum
-    }    
-    function findByKey(key, searchArr, multi){
-        var searchArr = (Array.isArray(searchArr)) ? searchArr : [searchArr]
-        var results = [];
-
-        for (var i = 0; i < obj.length; i++) {
-            if(searchArr.indexOf(obj[i][key]) > -1 ) {
-                results.push(obj[i]);
-                if(!multi){break}
-            }
+            return results
         }
 
-        return results
+        function spliceByKey(key, searchArr, multi){
+            var searchArr = (Array.isArray(searchArr)) ? searchArr : [searchArr]
+            var results = [];
+
+            for (var i = 0; i < obj.length; i++) {
+                if(searchArr.indexOf(obj[i][key]) > -1 ) {
+                    results.push(obj[i]);
+                    obj.splice(i, 1);
+                    i--;                
+                    if(!multi){break}
+                }
+            }
+
+            return results
+        }
+        function navigate(pNames, start){
+            var _obj = obj;
+
+            for (var i = start || 0; i < pNames.length; i++) {
+               _obj = _obj[pNames[i]]
+            }
+            return _obj
+        }    
+
+        return handler
     }
-
-    function spliceByKey(key, searchArr, multi){
-        var searchArr = (Array.isArray(searchArr)) ? searchArr : [searchArr]
-        var results = [];
-
-        for (var i = 0; i < obj.length; i++) {
-            if(searchArr.indexOf(obj[i][key]) > -1 ) {
-                results.push(obj[i]);
-                obj.splice(i, 1);
-                i--;                
-                if(!multi){break}
-            }
-        }
-
-        return results
-    }
-    function navigate(pNames, start){
-        var _obj = obj;
-
-        for (var i = start || 0; i < pNames.length; i++) {
-           _obj = _obj[pNames[i]]
-        }
-        return _obj
-    }    
-
-    return handler
-}
 
     function obj(_obj){
         return new objHandler(_obj)
