@@ -532,11 +532,13 @@ var tasks = (function(window){
                                 var script = document.createElement('script');
                                 script.setAttribute('src', scripts[i].src);
                                 //insert scripts into document
-                                document.body.appendChild(script);
+                                document.body.appendChild(script);                                
+                            }
+
+                            for (var i = 0; i < scripts.length; i++) {
                                 //remove scripts from template
                                 scripts[i].parentNode.removeChild(scripts[i]);
                             }
-
 
                             new componentInitializer(componentName);
                                                 
