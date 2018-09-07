@@ -492,6 +492,7 @@ var tasks = (function(window){
         var _serv = undefined;
         function onLoad(handler){    
             services[_serv].onLoad = configHandler(handler).run;
+            return tasks
         }
 
         function getService(url, name){
