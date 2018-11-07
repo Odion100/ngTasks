@@ -310,7 +310,9 @@ var tasks = (function(window){
             thisMod.useComponent = useComponent;
             thisMod.useConfig = useConfig;
             thisMod.useScope = useScope;
-
+            thisMod.emit = emit;
+            thisMod.on = on;
+            
             function useService(serviceName){
                 return passService(serviceName, mod);                      
             }
@@ -329,6 +331,20 @@ var tasks = (function(window){
 
             function useScope(name){
                 return _component.scopeMods[name]
+            }
+
+            var events = {};     
+            function emit(eventName, data){            
+                if(events[eventName]){
+                    events[eventName].handlers.forEach((handler)=>handler(data))
+                }                           
+            }
+
+            function on(eventName, handler){                                    
+                events[eventName] = events[eventName] || {};            
+                            
+                events[eventName].handlers = events[eventName].handlers || [];
+                events[eventName].handlers.push(handler)                
             }
 
             //new scopeInitializer(mod.name, thisMod, mod.options, _component);
@@ -396,7 +412,7 @@ var tasks = (function(window){
         function modFactory(mod, _component){
             var _component = _component || thisComponent;
 
-            var thisMod = {}, events = {};     
+            var thisMod = {}
             thisMod.useModule = useModule;        
             thisMod.useService = useService;
             thisMod.useComponent = useComponent;
@@ -425,17 +441,18 @@ var tasks = (function(window){
                 return configModule
             }
 
-            function emit(eventName, emitter, emitData){            
+            var events = {};     
+            function emit(eventName, data){            
                 if(events[eventName]){
-                    subs.forEach(function(sub){sub()})
+                    events[eventName].handlers.forEach((handler)=>handler(data))
                 }                           
             }
 
             function on(eventName, handler){                                    
                 events[eventName] = events[eventName] || {};            
                             
-                events[eventName].subscribers = events[eventName].subscribers || [];
-                events[eventName].subscribers.push(handler)                
+                events[eventName].handlers = events[eventName].handlers || [];
+                events[eventName].handlers.push(handler)                
             }
 
             mod.modConstructor.apply(thisMod, []);
@@ -492,7 +509,6 @@ var tasks = (function(window){
         var _serv = undefined;
         function onLoad(handler){    
             services[_serv].onLoad = configHandler(handler).run;
-            return tasks
         }
 
         function getService(url, name){
