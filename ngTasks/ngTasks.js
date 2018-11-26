@@ -27,7 +27,7 @@ var tasks = (function(window){
 
                 //if uiConfig has been set pass configuration duties on to it
                 if(typeof uiConfig === 'function'){
-                    uiConfig($urlRouterProvider, $stateProvider);
+                    uiConfig($urlRouterProvider, $stateProvider, configMod);
                 }else{
                     //else use default config                    
                     $urlRouterProvider.otherwise('/ngTasks');                
@@ -47,10 +47,10 @@ var tasks = (function(window){
         })
     }            
 
-    var ngService = angular.injector(['ng', 'ngFileUpload']).get, component_cache = [], isRoot = true;
+    var ngService = angular.injector(['ng', 'ngFileUpload']).get, component_cache = [], isRoot = true, configMod = {};
 
     function tasks(){        
-        var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], initAsync = [], initSync = [], configModule ={};
+        var tasks = window.tasks || (window.tasks = {}), modules = {}, services = {}, mods = [], initAsync = [], initSync = [];
         var thisComponent = {}, onCompleteHandlers = [];        
 
         tasks.loadService = loadService;
@@ -297,7 +297,7 @@ var tasks = (function(window){
                  var componentElements = _component.elemTemplate.getElementsByTagName(denormalize(componentName));
 
                 for (var i = 0; i < componentElements.length; i++) {
-                    componentElements[i].setAttribute('component-nsp', _component.name+"."+componentName)
+                    componentElements[i].setAttribute('component-nsp', _component.name+"."+componentName)        
                 }                           
             }
         }
@@ -312,7 +312,7 @@ var tasks = (function(window){
             thisMod.useScope = useScope;
             thisMod.emit = emit;
             thisMod.on = on;
-            
+
             function useService(serviceName){
                 return passService(serviceName, mod);                      
             }
@@ -326,7 +326,7 @@ var tasks = (function(window){
             }
 
             function useConfig(){
-                return configModule
+                return configMod
             }
 
             function useScope(name){
@@ -401,11 +401,11 @@ var tasks = (function(window){
             cb();         
         }
 
-        function getMod(modName, user){        
+        function getMod(modName){        
             return modules[modName].mod;                
         }
 
-        function passService(serviceName, user){
+        function passService(serviceName){
             return services[serviceName].service; 
         }
         
@@ -426,7 +426,7 @@ var tasks = (function(window){
             thisMod._name = mod.name;
 
             function useService(serviceName){
-                return passService(serviceName, mod);                      
+                return passService(serviceName);                      
             }
 
             function useModule(modToUse){              
@@ -438,7 +438,7 @@ var tasks = (function(window){
             }
 
             function useConfig(){
-                return configModule
+                return configMod
             }
 
             var events = {};     
@@ -508,7 +508,7 @@ var tasks = (function(window){
 
         var _serv = undefined;
         function onLoad(handler){    
-            services[_serv].onLoad = configHandler(handler).run;
+            services[_serv].onLoad = onLoadHandler(handler).run;
         }
 
         function getService(url, name){
@@ -706,8 +706,7 @@ var tasks = (function(window){
             function initSocketConnection(name_space){
                 var socket = io.connect(name_space)
                 console.log(map.nsp)
-                socket.on('dispatch', function (data) {
-                    //console.log(data);  
+                socket.on('dispatch', function (data) {                    
                     dispatch(data)
                 });
 
@@ -718,6 +717,8 @@ var tasks = (function(window){
                         name:'disconnect',
                         data:data
                     })
+                    
+                    socket.disconnect()
                     reconnectService()                  
                 })
 
@@ -732,29 +733,48 @@ var tasks = (function(window){
            return serverMod
         }  
 
-        function configHandler(handler){
+        function onLoadHandler(handler){
 
             return {//will be called by mth
                 run:function(next){
                     //if config is used next needs to be called for app to start                                   
                     
-                    configModule.next = function(){
+                    onLoadMod.next = function(){
                         if(typeof next === 'function'){next()}
                     }
 
-                    configModule.done = configModule.next
+                    onLoadMod.done = onLoadMod.next
                     
-                    configModule.useService = function useService(serviceName){
+                    onLoadMod.useService = function useService(serviceName){
                         return services[serviceName].service;
                     }
 
-                    handler.apply(configModule, [next]);
+                    handler.apply(onLoadMod, [next]);
                 }
             }
         }
 
-        function config(handler){
-            initSync.unshift(new configHandler(handler).run)
+        function configFactory(configConstructor, next){            
+                    
+            configMod.useService = useService;
+            configMod.useComponent = useComponent;
+
+            function useService(serviceName){
+                return passService(serviceName);                      
+            }        
+
+            function useComponent(name){
+                return (thisComponent.loadedComponents[name])?thisComponent.loadedComponents[name].scopeMods : {};
+            }
+
+            configConstructor.apply(configMod, [next]);                            
+        }
+
+        function configHandler(configConstructor){
+            return (next)=>configFactory(configConstructor, next)        
+        }
+        function config(configConstructor){
+            initSync.unshift(new configHandler(configConstructor));
             setInit();
             return tasks
         }
