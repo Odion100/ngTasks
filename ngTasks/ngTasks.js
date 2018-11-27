@@ -684,7 +684,20 @@ var tasks = (function(window){
                 }, function(err, new_api){
                     if(err){                        
                         //pass the job onto getService function   
-                        getService(services[serviceName].uri, serviceName).run();
+                        //getService(services[serviceName].uri, serviceName).run();
+
+                        services[serviceName].connection_attemps++;
+                        console.log(' -- FAILED CONNECTION TO SERVICE: '+serviceName +'---(after '+services[serviceName].connection_attemps+' attempts)');                                
+                        //
+                        //user can check for the existance of connectionErr property inside modules to check if the service has loaded correctly
+                        //so that the app can optionally be made to work even when some services fail                        
+                        services[serviceName].service.connectionErr = true;
+                        services[serviceName].service.err = err;
+
+                        //try to establish connection up to ten times
+                        if(services[serviceName].connection_attemps < 10){                            
+                            setTimeout(reconnectService, services[serviceName].connection_attemps*1500);
+                        }
                     }else{
                         var new_maps = new_api.maps;
 
